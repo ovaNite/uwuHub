@@ -1,16 +1,17 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- ⚙️ INITIAL SETTINGS (Unverändert)
+-- ⚙️ INITIAL SETTINGS
 local Settings = {
     AimbotEnabled = false,
     AimbotType = "Camera",
     TeamCheck = true,
     Smoothness = 0.15,
-    Range = 500,
+    Range = 200, 
     VisualRange = 500,
     AimKey = Enum.KeyCode.E, 
     ToggleKey = Enum.KeyCode.RightShift,
@@ -24,55 +25,74 @@ local Settings = {
     FOVColor = Color3.fromRGB(255, 0, 0)
 }
 
--- 🎨 UI CONSTRUCT
+-- 💾 CONFIG SYSTEM
+local ConfigFile = "uwuHub_SquareConfig.json"
+local function SaveConfig()
+    local Data = {
+        AimbotType = Settings.AimbotType, TeamCheck = Settings.TeamCheck,
+        Smoothness = Settings.Smoothness, Range = Settings.Range,
+        VisualRange = Settings.VisualRange, AimKey = tostring(Settings.AimKey),
+        TargetPart = Settings.TargetPart, CharmsEnabled = Settings.CharmsEnabled,
+        ESPEnabled = Settings.ESPEnabled, TracersEnabled = Settings.TracersEnabled,
+        FOVVisible = Settings.FOVVisible
+    }
+    if writefile then writefile(ConfigFile, HttpService:JSONEncode(Data)) end
+end
+
+local function LoadConfig()
+    if isfile and isfile(ConfigFile) then
+        local Data = HttpService:JSONDecode(readfile(ConfigFile))
+        for i, v in pairs(Data) do
+            if i == "AimKey" then
+                Settings.AimKey = Enum.KeyCode[v:gsub("Enum.KeyCode.", "")] or Enum.UserInputType[v:gsub("Enum.UserInputType.", "")]
+            else Settings[i] = v end
+        end
+    end
+end
+LoadConfig()
+
+-- 🎨 UI BASE (GRÖSSER & ECKIG)
 local ScreenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
-ScreenGui.Name = "uwuHub_Premium"
+ScreenGui.Name = "uwuHub_LargeSquare"
 ScreenGui.ResetOnSpawn = false
 
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 550, 0, 400)
-MainFrame.Position = UDim2.new(0.5, -275, 0.5, -200)
+MainFrame.Size = UDim2.new(0, 650, 0, 500) -- GRÖSSE ANGEPASST
+MainFrame.Position = UDim2.new(0.5, -325, 0.5, -250)
 MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-MainFrame.BorderSizePixel = 0
+MainFrame.BorderSizePixel = 1
+MainFrame.BorderColor3 = Color3.fromRGB(40, 40, 40)
 MainFrame.Active = true
 
-local MainCorner = Instance.new("UICorner", MainFrame)
-MainCorner.CornerRadius = UDim.new(0, 10)
-
--- 🖱️ DRAG STRIP (Top Bar) - NUR HIER BEWEGBAR
+-- 🖱️ DRAG STRIP
 local DragStrip = Instance.new("Frame", MainFrame)
-DragStrip.Size = UDim2.new(1, 0, 0, 30) -- Kleiner Streifen oben
-DragStrip.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-DragStrip.BorderSizePixel = 0
-Instance.new("UICorner", DragStrip).CornerRadius = UDim.new(0, 10)
+DragStrip.Size = UDim2.new(1, 0, 0, 30)
+DragStrip.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+DragStrip.BorderSizePixel = 1
+DragStrip.BorderColor3 = Color3.fromRGB(45, 45, 45)
 
--- Titel auf dem Drag-Streifen
 local Title = Instance.new("TextLabel", DragStrip)
-Title.Text = "uwu HUB v1 — Premium Edition"
+Title.Text = "  uwu HUB v1.0.0 - LARGE SQUARE EDITION"
 Title.Size = UDim2.new(1, -40, 1, 0)
-Title.Position = UDim2.new(0, 10, 0, 0)
 Title.BackgroundTransparency = 1
-Title.TextColor3 = Color3.fromRGB(180, 120, 255)
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 14
-Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.Code
+Title.TextSize = 15
+Title.TextXAlignment = "Left"
 
--- Schließen Button (auf dem Drag-Streifen)
 local CloseBtn = Instance.new("TextButton", DragStrip)
-CloseBtn.Text = "×"
+CloseBtn.Text = "X"
 CloseBtn.Size = UDim2.new(0, 30, 0, 30)
-CloseBtn.Position = UDim2.new(1, -35, 0, 0)
-CloseBtn.BackgroundTransparency = 1
-CloseBtn.TextColor3 = Color3.fromRGB(200, 50, 50)
-CloseBtn.TextSize = 25
+CloseBtn.Position = UDim2.new(1, -30, 0, 0)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+CloseBtn.BorderSizePixel = 0
+CloseBtn.TextColor3 = Color3.new(1, 1, 1)
 
--- 🕹️ DRAG LOGIC (Nur für DragStrip)
-local dragging, dragInput, dragStart, startPos
+-- DRAG LOGIC
+local dragging, dragStart, startPos
 DragStrip.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPos = MainFrame.Position
+        dragging = true dragStart = input.Position startPos = MainFrame.Position
     end
 end)
 UserInputService.InputChanged:Connect(function(input)
@@ -81,235 +101,180 @@ UserInputService.InputChanged:Connect(function(input)
         MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end)
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-end)
+UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
 
--- Seitenleiste
+-- SIDEBAR
 local SideBar = Instance.new("Frame", MainFrame)
-SideBar.Size = UDim2.new(0, 120, 1, -30)
+SideBar.Size = UDim2.new(0, 140, 1, -30)
 SideBar.Position = UDim2.new(0, 0, 0, 30)
 SideBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-SideBar.BorderSizePixel = 0
-Instance.new("UICorner", SideBar).CornerRadius = UDim.new(0, 10)
+SideBar.BorderSizePixel = 1
+SideBar.BorderColor3 = Color3.fromRGB(40, 40, 40)
 
 -- PAGE CONTAINER
 local function CreatePage()
     local f = Instance.new("ScrollingFrame", MainFrame)
-    f.Size = UDim2.new(1, -140, 1, -50)
-    f.Position = UDim2.new(0, 130, 0, 40)
+    f.Size = UDim2.new(1, -160, 1, -50)
+    f.Position = UDim2.new(0, 150, 0, 40)
     f.BackgroundTransparency = 1
     f.CanvasSize = UDim2.new(0, 0, 1.5, 0)
-    f.ScrollBarThickness = 2
+    f.ScrollBarThickness = 0
     f.Visible = false
     return f
 end
 
-local MainContent = CreatePage()
-MainContent.Visible = true
+local MainContent = CreatePage() MainContent.Visible = true
 local ESPContent = CreatePage()
 local FOVContent = CreatePage()
+local SettingsContent = CreatePage()
 
--- TABS
 local function AddTab(name, pos, page)
     local btn = Instance.new("TextButton", SideBar)
-    btn.Text = name
-    btn.Size = UDim2.new(0.8, 0, 0, 35)
-    btn.Position = UDim2.new(0.1, 0, 0, pos)
-    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    btn.Text = name btn.Size = UDim2.new(1, 0, 0, 50)
+    btn.Position = UDim2.new(0, 0, 0, pos)
+    btn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    btn.BorderSizePixel = 1
+    btn.BorderColor3 = Color3.fromRGB(40, 40, 40)
     btn.TextColor3 = Color3.new(1, 1, 1)
-    btn.Font = Enum.Font.GothamSemibold
-    Instance.new("UICorner", btn)
+    btn.Font = Enum.Font.Code
     btn.MouseButton1Click:Connect(function()
-        MainContent.Visible = false ESPContent.Visible = false FOVContent.Visible = false
+        MainContent.Visible = false ESPContent.Visible = false FOVContent.Visible = false SettingsContent.Visible = false
         page.Visible = true
     end)
 end
-AddTab("COMBAT", 20, MainContent)
-AddTab("VISUALS", 65, ESPContent)
-AddTab("FOV", 110, FOVContent)
+AddTab("COMBAT", 0, MainContent)
+AddTab("VISUALS", 50, ESPContent)
+AddTab("FOV", 100, FOVContent)
+AddTab("SETTINGS", 150, SettingsContent)
 
---- 🔵 COMBAT SECTION ---
-local function CreateSection(parent, title, pos)
-    local l = Instance.new("TextLabel", parent)
-    l.Text = "—— " .. title .. " ——"
-    l.Size = UDim2.new(1, 0, 0, 20)
-    l.Position = UDim2.new(0, 0, 0, pos)
-    l.BackgroundTransparency = 1
-    l.TextColor3 = Color3.fromRGB(100, 100, 100)
-    l.Font = Enum.Font.GothamSemibold
-    l.TextSize = 12
-end
+-- SLIDER (ECKIG)
+local function CreateSlider(parent, text, pos, startVal, max, callback)
+    local label = Instance.new("TextLabel", parent)
+    label.Text = text..": "..startVal
+    label.Position = UDim2.new(0, 5, 0, pos)
+    label.Size = UDim2.new(0, 250, 0, 25)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.new(1, 1, 1)
+    label.Font = Enum.Font.Code
+    label.TextXAlignment = "Left"
 
-CreateSection(MainContent, "MAIN", 0)
-local AimToggle = Instance.new("TextButton", MainContent)
-AimToggle.Size = UDim2.new(0, 180, 0, 35)
-AimToggle.Position = UDim2.new(0, 0, 0, 30)
-AimToggle.Text = "Aimbot: AUS"
-AimToggle.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-AimToggle.TextColor3 = Color3.new(1, 1, 1)
-Instance.new("UICorner", AimToggle)
+    local bg = Instance.new("Frame", parent)
+    bg.Size = UDim2.new(0, 450, 0, 15)
+    bg.Position = UDim2.new(0, 5, 0, pos + 30)
+    bg.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    bg.BorderSizePixel = 1
+    bg.BorderColor3 = Color3.fromRGB(60, 60, 60)
 
-CreateSection(MainContent, "SETTINGS", 80)
-local TypeBtn = Instance.new("TextButton", MainContent)
-TypeBtn.Size = UDim2.new(0, 180, 0, 35)
-TypeBtn.Position = UDim2.new(0, 0, 0, 110)
-TypeBtn.Text = "Type: Camera"
-TypeBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-TypeBtn.TextColor3 = Color3.new(1, 1, 1)
-Instance.new("UICorner", TypeBtn)
+    local fill = Instance.new("Frame", bg)
+    fill.Size = UDim2.new(startVal/max, 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    fill.BorderSizePixel = 0
 
-local KeybindBtn = Instance.new("TextButton", MainContent)
-KeybindBtn.Size = UDim2.new(0, 180, 0, 35)
-KeybindBtn.Position = UDim2.new(0, 200, 0, 110)
-KeybindBtn.Text = "Aim Key: E"
-KeybindBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-Instance.new("UICorner", KeybindBtn)
-
-local PartBtn = Instance.new("TextButton", MainContent)
-PartBtn.Size = UDim2.new(0, 180, 0, 35)
-PartBtn.Position = UDim2.new(0, 0, 0, 155)
-PartBtn.Text = "Target: Head"
-PartBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-Instance.new("UICorner", PartBtn)
-
-local TeamToggle = Instance.new("TextButton", MainContent)
-TeamToggle.Size = UDim2.new(0, 180, 0, 35)
-TeamToggle.Position = UDim2.new(0, 200, 0, 155)
-TeamToggle.Text = "Teamcheck: AN"
-TeamToggle.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-Instance.new("UICorner", TeamToggle)
-
-local SmoothLabel = Instance.new("TextLabel", MainContent)
-SmoothLabel.Text = "Smoothness: 0.15"
-SmoothLabel.Position = UDim2.new(0, 0, 0, 210)
-SmoothLabel.Size = UDim2.new(0, 200, 0, 20)
-SmoothLabel.BackgroundTransparency = 1
-SmoothLabel.TextColor3 = Color3.new(1, 1, 1)
-SmoothLabel.TextXAlignment = "Left"
-
-local SmoothBg = Instance.new("Frame", MainContent)
-SmoothBg.Size = UDim2.new(0, 380, 0, 8)
-SmoothBg.Position = UDim2.new(0, 0, 0, 235)
-SmoothBg.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-Instance.new("UICorner", SmoothBg)
-
-local SmoothFill = Instance.new("Frame", SmoothBg)
-SmoothFill.Size = UDim2.new(0.15, 0, 1, 0)
-SmoothFill.BackgroundColor3 = Color3.fromRGB(180, 120, 255)
-Instance.new("UICorner", SmoothFill)
-
---- 🟡 VISUALS SECTION ---
-CreateSection(ESPContent, "ESP OPTIONS", 0)
-local function NewESP(txt, pos, callback)
-    local btn = Instance.new("TextButton", ESPContent)
-    btn.Text = txt .. ": AUS"
-    btn.Size = UDim2.new(0, 180, 0, 35)
-    btn.Position = pos
-    btn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-    Instance.new("UICorner", btn)
-    local s = false
-    btn.MouseButton1Click:Connect(function()
-        s = not s btn.Text = txt .. (s and ": AN" or ": AUS")
-        btn.BackgroundColor3 = s and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
-        callback(s)
+    local dragging = false
+    bg.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end end)
+    UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+    
+    RunService.RenderStepped:Connect(function()
+        if dragging then
+            local mx = UserInputService:GetMouseLocation().X
+            local p = math.clamp((mx - bg.AbsolutePosition.X) / bg.AbsoluteSize.X, 0, 1)
+            local val = (max > 1) and math.floor(p * max) or string.format("%.2f", p)
+            fill.Size = UDim2.new(p, 0, 1, 0)
+            label.Text = text..": "..val
+            callback(tonumber(val))
+        end
     end)
 end
-NewESP("Charms", UDim2.new(0,0,0,30), function(v) Settings.CharmsEnabled = v end)
-NewESP("Box", UDim2.new(0,200,0,30), function(v) Settings.ESPEnabled = v end)
-NewESP("Tracers", UDim2.new(0,0,0,75), function(v) Settings.TracersEnabled = v end)
 
-local VisRangeLabel = Instance.new("TextLabel", ESPContent)
-VisRangeLabel.Text = "Visuals Range: 500"
-VisRangeLabel.Position = UDim2.new(0, 0, 0, 130)
-VisRangeLabel.Size = UDim2.new(0, 200, 0, 20)
-VisRangeLabel.BackgroundTransparency = 1
-VisRangeLabel.TextColor3 = Color3.new(1, 1, 1)
-VisRangeLabel.TextXAlignment = "Left"
+--- 🔵 COMBAT
+local AimToggle = Instance.new("TextButton", MainContent)
+AimToggle.Size = UDim2.new(0,220,0,40) AimToggle.Position = UDim2.new(0,5,0,5)
+AimToggle.Text = "Aimbot: AUS" AimToggle.BackgroundColor3 = Color3.fromRGB(150,50,50)
+AimToggle.TextColor3 = Color3.new(1,1,1) AimToggle.BorderSizePixel = 1
 
-local VisRangeBg = Instance.new("Frame", ESPContent)
-VisRangeBg.Size = UDim2.new(0, 380, 0, 8)
-VisRangeBg.Position = UDim2.new(0, 0, 0, 155)
-VisRangeBg.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-Instance.new("UICorner", VisRangeBg)
+local TypeBtn = Instance.new("TextButton", MainContent)
+TypeBtn.Size = UDim2.new(0,220,0,40) TypeBtn.Position = UDim2.new(0,5,0,55)
+TypeBtn.Text = "Type: "..Settings.AimbotType TypeBtn.BackgroundColor3 = Color3.fromRGB(35,35,35)
+TypeBtn.TextColor3 = Color3.new(1,1,1) TypeBtn.BorderSizePixel = 1
 
-local VisRangeFill = Instance.new("Frame", VisRangeBg)
-VisRangeFill.Size = UDim2.new(0.25, 0, 1, 0)
-VisRangeFill.BackgroundColor3 = Color3.fromRGB(180, 120, 255)
-Instance.new("UICorner", VisRangeFill)
+local KeybindBtn = Instance.new("TextButton", MainContent)
+KeybindBtn.Size = UDim2.new(0,220,0,40) KeybindBtn.Position = UDim2.new(0,235,0,55)
+KeybindBtn.Text = "Key: "..Settings.AimKey.Name KeybindBtn.BackgroundColor3 = Color3.fromRGB(35,35,35)
+KeybindBtn.TextColor3 = Color3.new(1,1,1) KeybindBtn.BorderSizePixel = 1
 
---- 🔴 FOV SECTION ---
-CreateSection(FOVContent, "FIELD OF VIEW", 0)
+local TeamToggle = Instance.new("TextButton", MainContent)
+TeamToggle.Size = UDim2.new(0,220,0,40) TeamToggle.Position = UDim2.new(0,5,0,105)
+TeamToggle.Text = "Teamcheck: AN" TeamToggle.BackgroundColor3 = Color3.fromRGB(50,150,50)
+TeamToggle.TextColor3 = Color3.new(1,1,1) TeamToggle.BorderSizePixel = 1
+
+local PartBtn = Instance.new("TextButton", MainContent)
+PartBtn.Size = UDim2.new(0,220,0,40) PartBtn.Position = UDim2.new(0,235,0,105)
+PartBtn.Text = "Target: "..Settings.TargetPart PartBtn.BackgroundColor3 = Color3.fromRGB(35,35,35)
+PartBtn.TextColor3 = Color3.new(1,1,1) PartBtn.BorderSizePixel = 1
+
+CreateSlider(MainContent, "Smoothness", 160, Settings.Smoothness, 1, function(v) Settings.Smoothness = v end)
+
+--- 🟡 VISUALS
+local function NewESP(txt, pos, callback, startState)
+    local btn = Instance.new("TextButton", ESPContent)
+    btn.Text = txt..": AUS" btn.Size = UDim2.new(0,220,0,40) btn.Position = pos
+    btn.BackgroundColor3 = Color3.fromRGB(150,50,50) btn.TextColor3 = Color3.new(1,1,1)
+    btn.BorderSizePixel = 1
+    local s = startState or false
+    local function update()
+        btn.Text = txt..(s and ": AN" or ": AUS")
+        btn.BackgroundColor3 = s and Color3.fromRGB(50,150,50) or Color3.fromRGB(150,50,50)
+    end
+    btn.MouseButton1Click:Connect(function() s = not s update() callback(s) end)
+    update()
+end
+NewESP("Charms", UDim2.new(0,5,0,5), function(v) Settings.CharmsEnabled = v end, Settings.CharmsEnabled)
+NewESP("Box", UDim2.new(0,235,0,5), function(v) Settings.ESPEnabled = v end, Settings.ESPEnabled)
+NewESP("Tracers", UDim2.new(0,5,0,55), function(v) Settings.TracersEnabled = v end, Settings.TracersEnabled)
+
+CreateSlider(ESPContent, "Visuals Range", 115, Settings.VisualRange, 2000, function(v) Settings.VisualRange = v end)
+
+--- 🔴 FOV
 local FOVToggle = Instance.new("TextButton", FOVContent)
-FOVToggle.Size = UDim2.new(0, 180, 0, 35)
-FOVToggle.Position = UDim2.new(0, 0, 0, 30)
-FOVToggle.Text = "FOV Circle: AUS"
-FOVToggle.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-Instance.new("UICorner", FOVToggle)
+FOVToggle.Size = UDim2.new(0,220,0,40) FOVToggle.Position = UDim2.new(0,5,0,5)
+FOVToggle.Text = "FOV Circle: AUS" FOVToggle.BackgroundColor3 = Color3.fromRGB(150,50,50)
+FOVToggle.TextColor3 = Color3.new(1,1,1) FOVToggle.BorderSizePixel = 1
 
-local FOVSliderBg = Instance.new("Frame", FOVContent)
-FOVSliderBg.Size = UDim2.new(0, 380, 0, 8)
-FOVSliderBg.Position = UDim2.new(0, 0, 0, 95)
-FOVSliderBg.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-Instance.new("UICorner", FOVSliderBg)
+CreateSlider(FOVContent, "FOV Radius", 65, Settings.Range, 500, function(v) Settings.Range = v end)
 
-local FOVSliderFill = Instance.new("Frame", FOVSliderBg)
-FOVSliderFill.Size = UDim2.new(0.4, 0, 1, 0)
-FOVSliderFill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-Instance.new("UICorner", FOVSliderFill)
+--- 💾 SETTINGS
+local SaveBtn = Instance.new("TextButton", SettingsContent)
+SaveBtn.Size = UDim2.new(0,220,0,50) SaveBtn.Position = UDim2.new(0,5,0,5)
+SaveBtn.Text = "SAVE CONFIG" SaveBtn.BackgroundColor3 = Color3.fromRGB(50, 100, 150)
+SaveBtn.TextColor3 = Color3.new(1,1,1) SaveBtn.Font = "Code"
+SaveBtn.MouseButton1Click:Connect(function() SaveConfig() SaveBtn.Text = "SAVED!" wait(1) SaveBtn.Text = "SAVE CONFIG" end)
 
---- ⚙️ ENGINE LOGIC ---
+--- ⚙️ LOGIC (Engine)
 local FOVCircle = Drawing.new("Circle")
 FOVCircle.Color = Settings.FOVColor
 FOVCircle.Thickness = Settings.FOVThickness
 FOVCircle.Visible = false
 
-local function GetClosestPlayer()
-    local Target, MouseDist = nil, Settings.Range
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild(Settings.TargetPart) then
-            if not Settings.TeamCheck or p.Team ~= LocalPlayer.Team then
-                local Pos, OnScreen = Camera:WorldToViewportPoint(p.Character[Settings.TargetPart].Position)
-                local D = (Vector2.new(Pos.X, Pos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                if OnScreen and D < MouseDist then Target = p.Character[Settings.TargetPart] MouseDist = D end
-            end
-        end
-    end
-    return Target
-end
-
-local DraggingSmooth, DraggingFOV, DraggingVis = false, false, false
-SmoothBg.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then DraggingSmooth = true end end)
-FOVSliderBg.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then DraggingFOV = true end end)
-VisRangeBg.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then DraggingVis = true end end)
-UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then DraggingSmooth = false DraggingFOV = false DraggingVis = false end end)
-
 RunService.RenderStepped:Connect(function()
     FOVCircle.Position = UserInputService:GetMouseLocation()
     FOVCircle.Radius = Settings.Range
-    local MX = UserInputService:GetMouseLocation().X
-    
-    if DraggingSmooth then
-        local P = math.clamp((MX - SmoothBg.AbsolutePosition.X) / SmoothBg.AbsoluteSize.X, 0.01, 1)
-        Settings.Smoothness = P SmoothFill.Size = UDim2.new(P,0,1,0) SmoothLabel.Text = "Smoothness: "..string.format("%.2f", P)
-    end
-    if DraggingFOV then
-        local P = math.clamp((MX - FOVSliderBg.AbsolutePosition.X) / FOVSliderBg.AbsoluteSize.X, 0.05, 1)
-        Settings.Range = math.floor(P * 500) FOVSliderFill.Size = UDim2.new(P,0,1,0)
-    end
-    if DraggingVis then
-        local P = math.clamp((MX - VisRangeBg.AbsolutePosition.X) / VisRangeBg.AbsoluteSize.X, 0.05, 1)
-        Settings.VisualRange = math.floor(P * 2000) VisRangeFill.Size = UDim2.new(P,0,1,0) VisRangeLabel.Text = "Visuals Range: "..Settings.VisualRange
-    end
-
     local IsPressed = (Settings.AimKey.EnumType == Enum.KeyCode and UserInputService:IsKeyDown(Settings.AimKey)) or (Settings.AimKey.EnumType == Enum.UserInputType and UserInputService:IsMouseButtonPressed(Settings.AimKey))
     if Settings.AimbotEnabled and IsPressed then
-        local T = GetClosestPlayer()
-        if T then
+        local Target, MouseDist = nil, Settings.Range
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild(Settings.TargetPart) then
+                if not Settings.TeamCheck or p.Team ~= LocalPlayer.Team then
+                    local Pos, OnScreen = Camera:WorldToViewportPoint(p.Character[Settings.TargetPart].Position)
+                    local D = (Vector2.new(Pos.X, Pos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                    if OnScreen and D < MouseDist then Target = p.Character[Settings.TargetPart] MouseDist = D end
+                end
+            end
+        end
+        if Target then
             if Settings.AimbotType == "Camera" then
-                Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, T.Position), Settings.Smoothness)
+                Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, Target.Position), Settings.Smoothness)
             else
-                local Pos, _ = Camera:WorldToViewportPoint(T.Position)
+                local Pos, _ = Camera:WorldToViewportPoint(Target.Position)
                 local MousePos = UserInputService:GetMouseLocation()
                 mousemoverel((Pos.X - MousePos.X) * Settings.Smoothness, (Pos.Y - MousePos.Y) * Settings.Smoothness)
             end
@@ -317,18 +282,19 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
+-- Button Connects
 TypeBtn.MouseButton1Click:Connect(function() Settings.AimbotType = (Settings.AimbotType == "Camera") and "Mouse" or "Camera" TypeBtn.Text = "Type: "..Settings.AimbotType end)
-PartBtn.MouseButton1Click:Connect(function() Settings.TargetPart = (Settings.TargetPart == "Head") and "HumanoidRootPart" or "Head" PartBtn.Text = "Target: "..(Settings.TargetPart == "Head" and "Head" or "Torso") end)
-TeamToggle.MouseButton1Click:Connect(function() Settings.TeamCheck = not Settings.TeamCheck TeamToggle.Text = "Teamcheck: "..(Settings.TeamCheck and "AN" or "AUS") TeamToggle.BackgroundColor3 = Settings.TeamCheck and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50) end)
-AimToggle.MouseButton1Click:Connect(function() Settings.AimbotEnabled = not Settings.AimbotEnabled AimToggle.Text = "Aimbot: "..(Settings.AimbotEnabled and "AN" or "AUS") AimToggle.BackgroundColor3 = Settings.AimbotEnabled and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50) end)
-FOVToggle.MouseButton1Click:Connect(function() Settings.FOVVisible = not Settings.FOVVisible FOVToggle.Text = "FOV Circle: "..(Settings.FOVVisible and "AN" or "AUS") FOVToggle.BackgroundColor3 = Settings.FOVVisible and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50) FOVCircle.Visible = Settings.FOVVisible end)
+PartBtn.MouseButton1Click:Connect(function() Settings.TargetPart = (Settings.TargetPart == "Head") and "HumanoidRootPart" or "Head" PartBtn.Text = "Target: "..Settings.TargetPart end)
+TeamToggle.MouseButton1Click:Connect(function() Settings.TeamCheck = not Settings.TeamCheck TeamToggle.Text = "Teamcheck: "..(Settings.TeamCheck and "AN" or "AUS") TeamToggle.BackgroundColor3 = Settings.TeamCheck and Color3.fromRGB(50,150,50) or Color3.fromRGB(150,50,50) end)
+AimToggle.MouseButton1Click:Connect(function() Settings.AimbotEnabled = not Settings.AimbotEnabled AimToggle.Text = "Aimbot: "..(Settings.AimbotEnabled and "AN" or "AUS") AimToggle.BackgroundColor3 = Settings.AimbotEnabled and Color3.fromRGB(50,150,50) or Color3.fromRGB(150,50,50) end)
+FOVToggle.MouseButton1Click:Connect(function() Settings.FOVVisible = not Settings.FOVVisible FOVToggle.Text = "FOV Circle: "..(Settings.FOVVisible and "AN" or "AUS") FOVCircle.Visible = Settings.FOVVisible end)
 
 local Waiting = false
 KeybindBtn.MouseButton1Click:Connect(function() Waiting = true KeybindBtn.Text = "..." end)
 UserInputService.InputBegan:Connect(function(i, p)
     if Waiting then
-        if i.UserInputType == Enum.UserInputType.Keyboard then Settings.AimKey = i.KeyCode KeybindBtn.Text = "Aim Key: "..i.KeyCode.Name Waiting = false
-        elseif i.UserInputType == Enum.UserInputType.MouseButton2 then Settings.AimKey = Enum.UserInputType.MouseButton2 KeybindBtn.Text = "Aim Key: Mouse2" Waiting = false end
+        if i.UserInputType == Enum.UserInputType.Keyboard then Settings.AimKey = i.KeyCode KeybindBtn.Text = "Key: "..i.KeyCode.Name Waiting = false
+        elseif i.UserInputType == Enum.UserInputType.MouseButton2 then Settings.AimKey = Enum.UserInputType.MouseButton2 KeybindBtn.Text = "Key: Mouse2" Waiting = false end
     elseif not p and i.KeyCode == Settings.ToggleKey then MainFrame.Visible = not MainFrame.Visible end
 end)
 
@@ -341,20 +307,16 @@ local function CreateESP(Player)
             local root = Player.Character.HumanoidRootPart
             local dist = (root.Position - Camera.CFrame.Position).Magnitude
             local Pos, OnScreen = Camera:WorldToViewportPoint(root.Position)
-            local inRange = (dist <= Settings.VisualRange)
             local highlight = Player.Character:FindFirstChild("uwuCharms")
-
-            if Settings.CharmsEnabled and isEnemy and inRange then
+            if Settings.CharmsEnabled and isEnemy and dist <= Settings.VisualRange then
                 if not highlight then highlight = Instance.new("Highlight", Player.Character) highlight.Name = "uwuCharms" end
                 highlight.Enabled = true
             elseif highlight then highlight.Enabled = false end
-
-            if Settings.TracersEnabled and OnScreen and isEnemy and inRange then
+            if Settings.TracersEnabled and OnScreen and isEnemy and dist <= Settings.VisualRange then
                 Line.Visible = true Line.From = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2) Line.To = Vector2.new(Pos.X, Pos.Y)
             else Line.Visible = false end
-
-            if Settings.ESPEnabled and OnScreen and isEnemy and inRange then
-                Box.Visible = true Box.Size = Vector2.new(2000/Pos.Z, 2500/Pos.Z) Box.Position = Vector2.new(Pos.X - Box.Size.X/2, Pos.Y - Box.Size.Y/2)
+            if Settings.ESPEnabled and OnScreen and isEnemy and dist <= Settings.VisualRange then
+                Box.Visible = true Box.Size = Vector2.new(2000/Pos.Z, 2500/Pos.Z) Box.Position = Vector2.new(Pos.X-Box.Size.X/2, Pos.Y-Box.Size.Y/2)
             else Box.Visible = false end
         else Line.Visible = false Box.Visible = false end
     end)
@@ -362,386 +324,3 @@ end
 for _, p in pairs(Players:GetPlayers()) do CreateESP(p) end
 Players.PlayerAdded:Connect(CreateESP)
 CloseBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
-KeybindBtn.Position = UDim2.new(0, 120, 0, 0)
-KeybindBtn.Text = "Key: " .. Settings.AimKey.Name
-KeybindBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-KeybindBtn.TextColor3 = Color3.new(1, 1, 1)
-Instance.new("UICorner", KeybindBtn)
-
--- TARGET PART BUTTON
-local PartBtn = Instance.new("TextButton", MainContent)
-PartBtn.Size = UDim2.new(0, 110, 0, 40)
-PartBtn.Position = UDim2.new(0, 240, 0, 0)
-PartBtn.Text = "Part: Head"
-PartBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-PartBtn.TextColor3 = Color3.new(1, 1, 1)
-Instance.new("UICorner", PartBtn)
-
-local TeamToggle = Instance.new("TextButton", MainContent)
-TeamToggle.Size = UDim2.new(0, 110, 0, 40)
-TeamToggle.Position = UDim2.new(0, 360, 0, 0)
-TeamToggle.Text = "Team: AN"
-TeamToggle.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-TeamToggle.TextColor3 = Color3.new(1, 1, 1)
-Instance.new("UICorner", TeamToggle)
-
--- Smoothness Slider
-local SliderLabel = Instance.new("TextLabel", MainContent)
-SliderLabel.Text = "Smoothness: " .. Settings.Smoothness
-SliderLabel.Position = UDim2.new(0, 0, 0, 55)
-SliderLabel.Size = UDim2.new(0, 200, 0, 20)
-SliderLabel.TextColor3 = Color3.new(1, 1, 1)
-SliderLabel.BackgroundTransparency = 1
-SliderLabel.TextXAlignment = Enum.TextXAlignment.Left
-
-local SliderBg = Instance.new("Frame", MainContent)
-SliderBg.Size = UDim2.new(0, 310, 0, 10)
-SliderBg.Position = UDim2.new(0, 0, 0, 80)
-SliderBg.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-Instance.new("UICorner", SliderBg)
-
-local SliderFill = Instance.new("Frame", SliderBg)
-SliderFill.Size = UDim2.new(Settings.Smoothness, 0, 1, 0)
-SliderFill.BackgroundColor3 = Color3.fromRGB(80, 120, 255)
-Instance.new("UICorner", SliderFill)
-
---- 🟡 ESP TAB FUNCTIONS ---
-local CharmsToggle = Instance.new("TextButton", ESPContent)
-CharmsToggle.Size = UDim2.new(0, 150, 0, 40)
-CharmsToggle.Text = "Charms: AUS"
-CharmsToggle.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-CharmsToggle.TextColor3 = Color3.new(1, 1, 1)
-Instance.new("UICorner", CharmsToggle)
-
-local EspBoxToggle = Instance.new("TextButton", ESPContent)
-EspBoxToggle.Size = UDim2.new(0, 150, 0, 40)
-EspBoxToggle.Position = UDim2.new(0, 160, 0, 0)
-EspBoxToggle.Text = "Box: AUS"
-EspBoxToggle.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-EspBoxToggle.TextColor3 = Color3.new(1, 1, 1)
-Instance.new("UICorner", EspBoxToggle)
-
-local TracerToggle = Instance.new("TextButton", ESPContent)
-TracerToggle.Size = UDim2.new(0, 150, 0, 40)
-TracerToggle.Position = UDim2.new(0, 320, 0, 0)
-TracerToggle.Text = "Tracers: AUS"
-TracerToggle.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-TracerToggle.TextColor3 = Color3.new(1, 1, 1)
-Instance.new("UICorner", TracerToggle)
-
---- ⚙️ LOGIC & CONNECTIONS ---
-PartBtn.MouseButton1Click:Connect(function()
-    if Settings.TargetPart == "Head" then
-        Settings.TargetPart = "HumanoidRootPart"
-        PartBtn.Text = "Part: Torso"
-    else
-        Settings.TargetPart = "Head"
-        PartBtn.Text = "Part: Head"
-    end
-end)
-
-local WaitingForKey = false
-KeybindBtn.MouseButton1Click:Connect(function() WaitingForKey = true KeybindBtn.Text = "Key: ..." end)
-UserInputService.InputBegan:Connect(function(input)
-    if WaitingForKey then
-        if input.UserInputType == Enum.UserInputType.Keyboard then
-            Settings.AimKey = input.KeyCode KeybindBtn.Text = "Key: " .. input.KeyCode.Name WaitingForKey = false
-        elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
-            Settings.AimKey = Enum.UserInputType.MouseButton2 KeybindBtn.Text = "Key: Mouse2" WaitingForKey = false
-        end
-    end
-end)
-
-AimToggle.MouseButton1Click:Connect(function()
-    Settings.AimbotEnabled = not Settings.AimbotEnabled
-    AimToggle.Text = Settings.AimbotEnabled and "Aimbot: AN" or "Aimbot: AUS"
-    AimToggle.BackgroundColor3 = Settings.AimbotEnabled and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
-end)
-
-TeamToggle.MouseButton1Click:Connect(function()
-    Settings.TeamCheck = not Settings.TeamCheck
-    TeamToggle.Text = Settings.TeamCheck and "Team: AN" or "Team: AUS"
-    TeamToggle.BackgroundColor3 = Settings.TeamCheck and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
-end)
-
-CharmsToggle.MouseButton1Click:Connect(function()
-    Settings.CharmsEnabled = not Settings.CharmsEnabled
-    CharmsToggle.Text = Settings.CharmsEnabled and "Charms: AN" or "Charms: AUS"
-    CharmsToggle.BackgroundColor3 = Settings.CharmsEnabled and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
-end)
-
-EspBoxToggle.MouseButton1Click:Connect(function()
-    Settings.ESPEnabled = not Settings.ESPEnabled
-    EspBoxToggle.Text = Settings.ESPEnabled and "Box: AN" or "Box: AUS"
-    EspBoxToggle.BackgroundColor3 = Settings.ESPEnabled and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
-end)
-
-TracerToggle.MouseButton1Click:Connect(function()
-    Settings.TracersEnabled = not Settings.TracersEnabled
-    TracerToggle.Text = Settings.TracersEnabled and "Tracers: AN" or "Tracers: AUS"
-    TracerToggle.BackgroundColor3 = Settings.TracersEnabled and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
-end)
-
--- Slider Logic
-local Dragging = false
-local function UpdateSlider()
-    local Percent = math.clamp((UserInputService:GetMouseLocation().X - SliderBg.AbsolutePosition.X) / SliderBg.AbsoluteSize.X, 0.01, 1)
-    Settings.Smoothness = Percent SliderFill.Size = UDim2.new(Percent, 0, 1, 0) SliderLabel.Text = "Smoothness: " .. string.format("%.2f", Percent)
-end
-SliderBg.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then Dragging = true UpdateSlider() end end)
-UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then Dragging = false end end)
-UserInputService.InputChanged:Connect(function(i) if Dragging and i.UserInputType == Enum.UserInputType.MouseMovement then UpdateSlider() end end)
-
---- 👁️ ESP SYSTEM ---
-local function CreateVisuals(Player)
-    local Line = Drawing.new("Line")
-    Line.Color = Color3.fromRGB(255, 0, 0) -- Rote Tracers
-    Line.Thickness = 1
-    local Box = Drawing.new("Square")
-    RunService.RenderStepped:Connect(function()
-        if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") and Player ~= LocalPlayer then
-            local highlight = Player.Character:FindFirstChild("uwuCharms")
-            local isEnemy = (not Settings.TeamCheck or Player.Team ~= LocalPlayer.Team)
-            local Pos, OnScreen = Camera:WorldToViewportPoint(Player.Character.HumanoidRootPart.Position)
-
-            -- Tracers vom Crosshair (Bildschirmmitte)
-            if Settings.TracersEnabled and OnScreen and isEnemy then
-                Line.Visible = true 
-                Line.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2) 
-                Line.To = Vector2.new(Pos.X, Pos.Y)
-            else Line.Visible = false end
-
-            -- Charms & Box (wie bisher)
-            if Settings.CharmsEnabled and isEnemy then
-                if not highlight then highlight = Instance.new("Highlight", Player.Character) end
-                highlight.Enabled = true
-            elseif highlight then highlight.Enabled = false end
-
-            if Settings.ESPEnabled and OnScreen and isEnemy then
-                Box.Visible = true Box.Size = Vector2.new(2000/Pos.Z, 2500/Pos.Z) Box.Position = Vector2.new(Pos.X - Box.Size.X/2, Pos.Y - Box.Size.Y/2)
-            else Box.Visible = false end
-        else Line.Visible = false Box.Visible = false end
-    end)
-end
-for _, p in pairs(Players:GetPlayers()) do CreateVisuals(p) end
-Players.PlayerAdded:Connect(CreateVisuals)
-
---- 🎯 AIMBOT ENGINE ---
-RunService.RenderStepped:Connect(function()
-    local IsPressed = (Settings.AimKey.EnumType == Enum.KeyCode and UserInputService:IsKeyDown(Settings.AimKey)) or (Settings.AimKey.EnumType == Enum.UserInputType and UserInputService:IsMouseButtonPressed(Settings.AimKey))
-    if Settings.AimbotEnabled and IsPressed then
-        local Target, MaxDist = nil, Settings.Range
-        for _, p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild(Settings.TargetPart) then
-                if not Settings.TeamCheck or p.Team ~= LocalPlayer.Team then
-                    local Pos, OnScreen = Camera:WorldToViewportPoint(p.Character[Settings.TargetPart].Position)
-                    local Dist = (Vector2.new(Pos.X, Pos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                    if OnScreen and Dist < MaxDist then Target = p.Character[Settings.TargetPart] MaxDist = Dist end
-                end
-            end
-        end
-        if Target then Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, Target.Position), Settings.Smoothness) end
-    end
-end)
-
-CloseBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
-UserInputService.InputBegan:Connect(function(i, p) if not p and i.KeyCode == Settings.ToggleKey then MainFrame.Visible = not MainFrame.Visible end end)
-MainFrame.Position = UDim2.new(0.5, -250, 0.5, -190)
-MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-MainFrame.Active = true
-MainFrame.Draggable = true
-Instance.new("UICorner", MainFrame)
-
--- TITLE & CLOSE BUTTON
-local Title = Instance.new("TextLabel", MainFrame)
-Title.Text = "  uwu Hub v1.0.0 Beta"
-Title.Size = UDim2.new(1, 0, 0, 40)
-Title.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-Title.TextColor3 = Color3.new(1, 1, 1)
-Title.Font = Enum.Font.GothamBold
-Title.TextXAlignment = Enum.TextXAlignment.Left
-Instance.new("UICorner", Title)
-
-local CloseBtn = Instance.new("TextButton", MainFrame)
-CloseBtn.Text = "X"
-CloseBtn.Size = UDim2.new(0, 30, 0, 30)
-CloseBtn.Position = UDim2.new(1, -35, 0, 5)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-CloseBtn.TextColor3 = Color3.new(1, 1, 1)
-Instance.new("UICorner", CloseBtn)
-
--- FOV CIRCLE
-local FOVCircle = Drawing.new("Circle")
-FOVCircle.Thickness = 1
-FOVCircle.Color = Color3.new(1, 1, 1)
-FOVCircle.Transparency = 0.7
-FOVCircle.Visible = false
-
--- TABS
-local MainContent = Instance.new("Frame", MainFrame)
-MainContent.Size = UDim2.new(1, -20, 1, -100)
-MainContent.Position = UDim2.new(0, 10, 0, 90)
-MainContent.BackgroundTransparency = 1
-
-local ESPContent = Instance.new("Frame", MainFrame)
-ESPContent.Size = UDim2.new(1, -20, 1, -100)
-ESPContent.Position = UDim2.new(0, 10, 0, 90)
-ESPContent.BackgroundTransparency = 1
-ESPContent.Visible = false
-
-local function CreateTab(name, pos, content)
-    local btn = Instance.new("TextButton", MainFrame)
-    btn.Text = name
-    btn.Size = UDim2.new(0, 100, 0, 30)
-    btn.Position = pos
-    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    btn.TextColor3 = Color3.new(1, 1, 1)
-    Instance.new("UICorner", btn)
-    btn.MouseButton1Click:Connect(function()
-        MainContent.Visible = (content == MainContent)
-        ESPContent.Visible = (content == ESPContent)
-    end)
-end
-
-CreateTab("Main", UDim2.new(0, 10, 0, 50), MainContent)
-CreateTab("ESP", UDim2.new(0, 120, 0, 50), ESPContent)
-
--- HELPER BUTTON
-local function NewToggle(name, pos, parent, callback)
-    local btn = Instance.new("TextButton", parent)
-    btn.Size = UDim2.new(0, 150, 0, 40)
-    btn.Position = pos
-    btn.Text = name .. ": AUS"
-    btn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-    btn.TextColor3 = Color3.new(1, 1, 1)
-    Instance.new("UICorner", btn)
-    
-    local state = false
-    btn.MouseButton1Click:Connect(function()
-        state = not state
-        btn.Text = name .. (state and ": AN" or ": AUS")
-        btn.BackgroundColor3 = state and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
-        callback(state)
-    end)
-end
-
---- 🔵 MAIN TAB ---
-NewToggle("Aimbot", UDim2.new(0, 0, 0, 0), MainContent, function(v) Settings.AimbotEnabled = v FOVCircle.Visible = v end)
-NewToggle("Teamcheck", UDim2.new(0, 160, 0, 0), MainContent, function(v) Settings.TeamCheck = v end)
-
--- SMOOTHNESS SLIDER (MAIN)
-local SmoothLabel = Instance.new("TextLabel", MainContent)
-SmoothLabel.Text = "Aimbot Smoothness: " .. Settings.Smoothness
-SmoothLabel.Position = UDim2.new(0, 0, 0, 60)
-SmoothLabel.Size = UDim2.new(0, 200, 0, 20)
-SmoothLabel.TextColor3 = Color3.new(1, 1, 1)
-SmoothLabel.BackgroundTransparency = 1
-SmoothLabel.TextXAlignment = "Left"
-
-local SmoothBg = Instance.new("Frame", MainContent)
-SmoothBg.Size = UDim2.new(0, 310, 0, 10)
-SmoothBg.Position = UDim2.new(0, 0, 0, 85)
-SmoothBg.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-Instance.new("UICorner", SmoothBg)
-
-local SmoothFill = Instance.new("Frame", SmoothBg)
-SmoothFill.Size = UDim2.new(Settings.Smoothness, 0, 1, 0)
-SmoothFill.BackgroundColor3 = Color3.fromRGB(80, 150, 255)
-Instance.new("UICorner", SmoothFill)
-
-local DraggingSmooth = false
-SmoothBg.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then DraggingSmooth = true end end)
-UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then DraggingSmooth = false end end)
-
-RunService.RenderStepped:Connect(function()
-    if DraggingSmooth then
-        local MousePos = UserInputService:GetMouseLocation().X
-        local Percent = math.clamp((MousePos - SmoothBg.AbsolutePosition.X) / SmoothBg.AbsoluteSize.X, 0.01, 1)
-        Settings.Smoothness = Percent
-        SmoothFill.Size = UDim2.new(Percent, 0, 1, 0)
-        SmoothLabel.Text = "Aimbot Smoothness: " .. string.format("%.2f", Percent)
-    end
-end)
-
---- 🟡 ESP TAB ---
-NewToggle("ESP Boxes", UDim2.new(0, 0, 0, 0), ESPContent, function(v) Settings.ESPEnabled = v end)
-NewToggle("Tracker", UDim2.new(0, 160, 0, 0), ESPContent, function(v) Settings.TrackerEnabled = v end)
-
--- FOV SLIDER (ESP TAB)
-local RangeLabel = Instance.new("TextLabel", ESPContent)
-RangeLabel.Text = "FOV Range: " .. Settings.Range
-RangeLabel.Position = UDim2.new(0, 0, 0, 60)
-RangeLabel.TextColor3 = Color3.new(1, 1, 1)
-RangeLabel.BackgroundTransparency = 1
-
-local RangeBg = Instance.new("Frame", ESPContent)
-RangeBg.Size = UDim2.new(0, 310, 0, 10)
-RangeBg.Position = UDim2.new(0, 0, 0, 85)
-RangeBg.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-Instance.new("UICorner", RangeBg)
-
-local RangeFill = Instance.new("Frame", RangeBg)
-RangeFill.Size = UDim2.new(0.4, 0, 1, 0)
-RangeFill.BackgroundColor3 = Color3.fromRGB(255, 200, 80)
-Instance.new("UICorner", RangeFill)
-
-local DraggingRange = false
-RangeBg.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then DraggingRange = true end end)
-UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then DraggingRange = false end end)
-
-RunService.RenderStepped:Connect(function()
-    if DraggingRange then
-        local MousePos = UserInputService:GetMouseLocation().X
-        local Percent = math.clamp((MousePos - RangeBg.AbsolutePosition.X) / RangeBg.AbsoluteSize.X, 0.05, 1)
-        Settings.Range = math.floor(Percent * 500)
-        RangeFill.Size = UDim2.new(Percent, 0, 1, 0)
-        RangeLabel.Text = "FOV Range: " .. Settings.Range
-        FOVCircle.Radius = Settings.Range
-    end
-end)
-
---- 👁️ ESP LOGIC ---
-local function CreateVisuals(Player)
-    local Line = Drawing.new("Line")
-    local Box = Drawing.new("Square")
-    RunService.RenderStepped:Connect(function()
-        if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") and Player ~= LocalPlayer then
-            local Pos, OnScreen = Camera:WorldToViewportPoint(Player.Character.HumanoidRootPart.Position)
-            local IsEnemy = (not Settings.TeamCheck or Player.Team ~= LocalPlayer.Team)
-            if Settings.TrackerEnabled and OnScreen and IsEnemy then
-                Line.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-                Line.To = Vector2.new(Pos.X, Pos.Y)
-                Line.Visible = true
-            else Line.Visible = false end
-            if Settings.ESPEnabled and OnScreen and IsEnemy then
-                Box.Size = Vector2.new(2000/Pos.Z, 2500/Pos.Z)
-                Box.Position = Vector2.new(Pos.X - Box.Size.X/2, Pos.Y - Box.Size.Y/2)
-                Box.Visible = true
-            else Box.Visible = false end
-        else Line.Visible = false Box.Visible = false end
-    end)
-end
-for _, p in pairs(Players:GetPlayers()) do CreateVisuals(p) end
-Players.PlayerAdded:Connect(CreateVisuals)
-
---- 🎯 AIMBOT ENGINE ---
-RunService.RenderStepped:Connect(function()
-    FOVCircle.Position = UserInputService:GetMouseLocation()
-    if Settings.AimbotEnabled and UserInputService:IsKeyDown(Settings.AimKey) then
-        local Target = nil
-        local Dist = Settings.Range
-        for _, p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild(Settings.TargetPart) then
-                if not Settings.TeamCheck or p.Team ~= LocalPlayer.Team then
-                    local Pos, OnScreen = Camera:WorldToViewportPoint(p.Character[Settings.TargetPart].Position)
-                    local MouseDist = (Vector2.new(Pos.X, Pos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                    if OnScreen and MouseDist < Dist then Target = p.Character[Settings.TargetPart] Dist = MouseDist end
-                end
-            end
-        end
-        if Target then Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, Target.Position), Settings.Smoothness) end
-    end
-end)
-
-CloseBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
-UserInputService.InputBegan:Connect(function(i, p) if not p and i.KeyCode == Settings.ToggleKey then MainFrame.Visible = not MainFrame.Visible end end)

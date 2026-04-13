@@ -1,0 +1,226 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- ⚙️ INITIAL SETTINGS
+local Settings = {
+    AimbotEnabled = false,
+    TeamCheck = true,
+    Smoothness = 0.15,
+    Range = 200, 
+    AimKey = Enum.KeyCode.E,
+    ToggleKey = Enum.KeyCode.RightShift,
+    TargetPart = "Head",
+    UIVisible = true,
+    ESPEnabled = false,
+    TrackerEnabled = false
+}
+
+-- 🎨 UI BASE
+local ScreenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+ScreenGui.Name = "uwuHub_Final"
+ScreenGui.ResetOnSpawn = false
+
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 500, 0, 380)
+MainFrame.Position = UDim2.new(0.5, -250, 0.5, -190)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.Active = true
+MainFrame.Draggable = true
+Instance.new("UICorner", MainFrame)
+
+-- TITLE & CLOSE BUTTON
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Text = "  uwu Hub v1.0.0 Beta"
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Font = Enum.Font.GothamBold
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Instance.new("UICorner", Title)
+
+local CloseBtn = Instance.new("TextButton", MainFrame)
+CloseBtn.Text = "X"
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -35, 0, 5)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+CloseBtn.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", CloseBtn)
+
+-- FOV CIRCLE
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 1
+FOVCircle.Color = Color3.new(1, 1, 1)
+FOVCircle.Transparency = 0.7
+FOVCircle.Visible = false
+
+-- TABS
+local MainContent = Instance.new("Frame", MainFrame)
+MainContent.Size = UDim2.new(1, -20, 1, -100)
+MainContent.Position = UDim2.new(0, 10, 0, 90)
+MainContent.BackgroundTransparency = 1
+
+local ESPContent = Instance.new("Frame", MainFrame)
+ESPContent.Size = UDim2.new(1, -20, 1, -100)
+ESPContent.Position = UDim2.new(0, 10, 0, 90)
+ESPContent.BackgroundTransparency = 1
+ESPContent.Visible = false
+
+local function CreateTab(name, pos, content)
+    local btn = Instance.new("TextButton", MainFrame)
+    btn.Text = name
+    btn.Size = UDim2.new(0, 100, 0, 30)
+    btn.Position = pos
+    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    Instance.new("UICorner", btn)
+    btn.MouseButton1Click:Connect(function()
+        MainContent.Visible = (content == MainContent)
+        ESPContent.Visible = (content == ESPContent)
+    end)
+end
+
+CreateTab("Main", UDim2.new(0, 10, 0, 50), MainContent)
+CreateTab("ESP", UDim2.new(0, 120, 0, 50), ESPContent)
+
+-- HELPER BUTTON
+local function NewToggle(name, pos, parent, callback)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = UDim2.new(0, 150, 0, 40)
+    btn.Position = pos
+    btn.Text = name .. ": AUS"
+    btn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    Instance.new("UICorner", btn)
+    
+    local state = false
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        btn.Text = name .. (state and ": AN" or ": AUS")
+        btn.BackgroundColor3 = state and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
+        callback(state)
+    end)
+end
+
+--- 🔵 MAIN TAB ---
+NewToggle("Aimbot", UDim2.new(0, 0, 0, 0), MainContent, function(v) Settings.AimbotEnabled = v FOVCircle.Visible = v end)
+NewToggle("Teamcheck", UDim2.new(0, 160, 0, 0), MainContent, function(v) Settings.TeamCheck = v end)
+
+-- SMOOTHNESS SLIDER (MAIN)
+local SmoothLabel = Instance.new("TextLabel", MainContent)
+SmoothLabel.Text = "Aimbot Smoothness: " .. Settings.Smoothness
+SmoothLabel.Position = UDim2.new(0, 0, 0, 60)
+SmoothLabel.Size = UDim2.new(0, 200, 0, 20)
+SmoothLabel.TextColor3 = Color3.new(1, 1, 1)
+SmoothLabel.BackgroundTransparency = 1
+SmoothLabel.TextXAlignment = "Left"
+
+local SmoothBg = Instance.new("Frame", MainContent)
+SmoothBg.Size = UDim2.new(0, 310, 0, 10)
+SmoothBg.Position = UDim2.new(0, 0, 0, 85)
+SmoothBg.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+Instance.new("UICorner", SmoothBg)
+
+local SmoothFill = Instance.new("Frame", SmoothBg)
+SmoothFill.Size = UDim2.new(Settings.Smoothness, 0, 1, 0)
+SmoothFill.BackgroundColor3 = Color3.fromRGB(80, 150, 255)
+Instance.new("UICorner", SmoothFill)
+
+local DraggingSmooth = false
+SmoothBg.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then DraggingSmooth = true end end)
+UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then DraggingSmooth = false end end)
+
+RunService.RenderStepped:Connect(function()
+    if DraggingSmooth then
+        local MousePos = UserInputService:GetMouseLocation().X
+        local Percent = math.clamp((MousePos - SmoothBg.AbsolutePosition.X) / SmoothBg.AbsoluteSize.X, 0.01, 1)
+        Settings.Smoothness = Percent
+        SmoothFill.Size = UDim2.new(Percent, 0, 1, 0)
+        SmoothLabel.Text = "Aimbot Smoothness: " .. string.format("%.2f", Percent)
+    end
+end)
+
+--- 🟡 ESP TAB ---
+NewToggle("ESP Boxes", UDim2.new(0, 0, 0, 0), ESPContent, function(v) Settings.ESPEnabled = v end)
+NewToggle("Tracker", UDim2.new(0, 160, 0, 0), ESPContent, function(v) Settings.TrackerEnabled = v end)
+
+-- FOV SLIDER (ESP TAB)
+local RangeLabel = Instance.new("TextLabel", ESPContent)
+RangeLabel.Text = "FOV Range: " .. Settings.Range
+RangeLabel.Position = UDim2.new(0, 0, 0, 60)
+RangeLabel.TextColor3 = Color3.new(1, 1, 1)
+RangeLabel.BackgroundTransparency = 1
+
+local RangeBg = Instance.new("Frame", ESPContent)
+RangeBg.Size = UDim2.new(0, 310, 0, 10)
+RangeBg.Position = UDim2.new(0, 0, 0, 85)
+RangeBg.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+Instance.new("UICorner", RangeBg)
+
+local RangeFill = Instance.new("Frame", RangeBg)
+RangeFill.Size = UDim2.new(0.4, 0, 1, 0)
+RangeFill.BackgroundColor3 = Color3.fromRGB(255, 200, 80)
+Instance.new("UICorner", RangeFill)
+
+local DraggingRange = false
+RangeBg.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then DraggingRange = true end end)
+UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then DraggingRange = false end end)
+
+RunService.RenderStepped:Connect(function()
+    if DraggingRange then
+        local MousePos = UserInputService:GetMouseLocation().X
+        local Percent = math.clamp((MousePos - RangeBg.AbsolutePosition.X) / RangeBg.AbsoluteSize.X, 0.05, 1)
+        Settings.Range = math.floor(Percent * 500)
+        RangeFill.Size = UDim2.new(Percent, 0, 1, 0)
+        RangeLabel.Text = "FOV Range: " .. Settings.Range
+        FOVCircle.Radius = Settings.Range
+    end
+end)
+
+--- 👁️ ESP LOGIC ---
+local function CreateVisuals(Player)
+    local Line = Drawing.new("Line")
+    local Box = Drawing.new("Square")
+    RunService.RenderStepped:Connect(function()
+        if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") and Player ~= LocalPlayer then
+            local Pos, OnScreen = Camera:WorldToViewportPoint(Player.Character.HumanoidRootPart.Position)
+            local IsEnemy = (not Settings.TeamCheck or Player.Team ~= LocalPlayer.Team)
+            if Settings.TrackerEnabled and OnScreen and IsEnemy then
+                Line.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                Line.To = Vector2.new(Pos.X, Pos.Y)
+                Line.Visible = true
+            else Line.Visible = false end
+            if Settings.ESPEnabled and OnScreen and IsEnemy then
+                Box.Size = Vector2.new(2000/Pos.Z, 2500/Pos.Z)
+                Box.Position = Vector2.new(Pos.X - Box.Size.X/2, Pos.Y - Box.Size.Y/2)
+                Box.Visible = true
+            else Box.Visible = false end
+        else Line.Visible = false Box.Visible = false end
+    end)
+end
+for _, p in pairs(Players:GetPlayers()) do CreateVisuals(p) end
+Players.PlayerAdded:Connect(CreateVisuals)
+
+--- 🎯 AIMBOT ENGINE ---
+RunService.RenderStepped:Connect(function()
+    FOVCircle.Position = UserInputService:GetMouseLocation()
+    if Settings.AimbotEnabled and UserInputService:IsKeyDown(Settings.AimKey) then
+        local Target = nil
+        local Dist = Settings.Range
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild(Settings.TargetPart) then
+                if not Settings.TeamCheck or p.Team ~= LocalPlayer.Team then
+                    local Pos, OnScreen = Camera:WorldToViewportPoint(p.Character[Settings.TargetPart].Position)
+                    local MouseDist = (Vector2.new(Pos.X, Pos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                    if OnScreen and MouseDist < Dist then Target = p.Character[Settings.TargetPart] Dist = MouseDist end
+                end
+            end
+        end
+        if Target then Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, Target.Position), Settings.Smoothness) end
+    end
+end)
+
+CloseBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
+UserInputService.InputBegan:Connect(function(i, p) if not p and i.KeyCode == Settings.ToggleKey then MainFrame.Visible = not MainFrame.Visible end end)

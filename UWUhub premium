@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService") -- Neu für Config
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
@@ -39,14 +40,13 @@ MainFrame.Active = true
 local MainCorner = Instance.new("UICorner", MainFrame)
 MainCorner.CornerRadius = UDim.new(0, 10)
 
--- 🖱️ DRAG STRIP (Top Bar) - NUR HIER BEWEGBAR
+-- 🖱️ DRAG STRIP (Top Bar)
 local DragStrip = Instance.new("Frame", MainFrame)
-DragStrip.Size = UDim2.new(1, 0, 0, 30) -- Kleiner Streifen oben
+DragStrip.Size = UDim2.new(1, 0, 0, 30)
 DragStrip.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 DragStrip.BorderSizePixel = 0
 Instance.new("UICorner", DragStrip).CornerRadius = UDim.new(0, 10)
 
--- Titel auf dem Drag-Streifen
 local Title = Instance.new("TextLabel", DragStrip)
 Title.Text = "uwu HUB v1 — Premium Edition"
 Title.Size = UDim2.new(1, -40, 1, 0)
@@ -57,7 +57,6 @@ Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
 Title.TextXAlignment = Enum.TextXAlignment.Left
 
--- Schließen Button (auf dem Drag-Streifen)
 local CloseBtn = Instance.new("TextButton", DragStrip)
 CloseBtn.Text = "×"
 CloseBtn.Size = UDim2.new(0, 30, 0, 30)
@@ -66,7 +65,7 @@ CloseBtn.BackgroundTransparency = 1
 CloseBtn.TextColor3 = Color3.fromRGB(200, 50, 50)
 CloseBtn.TextSize = 25
 
--- 🕹️ DRAG LOGIC (Nur für DragStrip)
+-- 🕹️ DRAG LOGIC
 local dragging, dragInput, dragStart, startPos
 DragStrip.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -109,6 +108,7 @@ local MainContent = CreatePage()
 MainContent.Visible = true
 local ESPContent = CreatePage()
 local FOVContent = CreatePage()
+local SettingsContent = CreatePage() -- NEUER TAB PAGE
 
 -- TABS
 local function AddTab(name, pos, page)
@@ -121,13 +121,17 @@ local function AddTab(name, pos, page)
     btn.Font = Enum.Font.GothamSemibold
     Instance.new("UICorner", btn)
     btn.MouseButton1Click:Connect(function()
-        MainContent.Visible = false ESPContent.Visible = false FOVContent.Visible = false
+        MainContent.Visible = false 
+        ESPContent.Visible = false 
+        FOVContent.Visible = false
+        SettingsContent.Visible = false -- Neu
         page.Visible = true
     end)
 end
 AddTab("COMBAT", 20, MainContent)
 AddTab("VISUALS", 65, ESPContent)
 AddTab("FOV", 110, FOVContent)
+AddTab("SETTINGS", 155, SettingsContent) -- NEUER TAB BUTTON
 
 --- 🔵 COMBAT SECTION ---
 local function CreateSection(parent, title, pos)
@@ -207,6 +211,7 @@ local function NewESP(txt, pos, callback)
     btn.Size = UDim2.new(0, 180, 0, 35)
     btn.Position = pos
     btn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+    btn.TextColor3 = Color3.new(1,1,1)
     Instance.new("UICorner", btn)
     local s = false
     btn.MouseButton1Click:Connect(function()
@@ -224,141 +229,45 @@ VisRangeLabel.Text = "Visuals Range: 500"
 VisRangeLabel.Position = UDim2.new(0, 0, 0, 130)
 VisRangeLabel.Size = UDim2.new(0, 200, 0, 20)
 VisRangeLabel.BackgroundTransparency = 1
-VisRangeLabel.TextColor3 = Color3.new(1, 1, 1)
-VisRangeLabel.TextXAlignment = "Left"
+VisRangeLabel.TextColor3 = Color3.new(1, 1, 1) -- Vervollständigt
 
-local VisRangeBg = Instance.new("Frame", ESPContent)
-VisRangeBg.Size = UDim2.new(0, 380, 0, 8)
-VisRangeBg.Position = UDim2.new(0, 0, 0, 155)
-VisRangeBg.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-Instance.new("UICorner", VisRangeBg)
+--- ⚙️ SETTINGS SECTION (NEU) ---
+CreateSection(SettingsContent, "CONFIG MANAGER", 0)
 
-local VisRangeFill = Instance.new("Frame", VisRangeBg)
-VisRangeFill.Size = UDim2.new(0.25, 0, 1, 0)
-VisRangeFill.BackgroundColor3 = Color3.fromRGB(180, 120, 255)
-Instance.new("UICorner", VisRangeFill)
-
---- 🔴 FOV SECTION ---
-CreateSection(FOVContent, "FIELD OF VIEW", 0)
-local FOVToggle = Instance.new("TextButton", FOVContent)
-FOVToggle.Size = UDim2.new(0, 180, 0, 35)
-FOVToggle.Position = UDim2.new(0, 0, 0, 30)
-FOVToggle.Text = "FOV Circle: AUS"
-FOVToggle.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-Instance.new("UICorner", FOVToggle)
-
-local FOVSliderBg = Instance.new("Frame", FOVContent)
-FOVSliderBg.Size = UDim2.new(0, 380, 0, 8)
-FOVSliderBg.Position = UDim2.new(0, 0, 0, 95)
-FOVSliderBg.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-Instance.new("UICorner", FOVSliderBg)
-
-local FOVSliderFill = Instance.new("Frame", FOVSliderBg)
-FOVSliderFill.Size = UDim2.new(0.4, 0, 1, 0)
-FOVSliderFill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-Instance.new("UICorner", FOVSliderFill)
-
---- ⚙️ ENGINE LOGIC ---
-local FOVCircle = Drawing.new("Circle")
-FOVCircle.Color = Settings.FOVColor
-FOVCircle.Thickness = Settings.FOVThickness
-FOVCircle.Visible = false
-
-local function GetClosestPlayer()
-    local Target, MouseDist = nil, Settings.Range
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild(Settings.TargetPart) then
-            if not Settings.TeamCheck or p.Team ~= LocalPlayer.Team then
-                local Pos, OnScreen = Camera:WorldToViewportPoint(p.Character[Settings.TargetPart].Position)
-                local D = (Vector2.new(Pos.X, Pos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                if OnScreen and D < MouseDist then Target = p.Character[Settings.TargetPart] MouseDist = D end
-            end
-        end
-    end
-    return Target
+local function SaveConfig()
+    local json = HttpService:JSONEncode(Settings)
+    writefile("uwuHub_Config.json", json)
 end
 
-local DraggingSmooth, DraggingFOV, DraggingVis = false, false, false
-SmoothBg.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then DraggingSmooth = true end end)
-FOVSliderBg.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then DraggingFOV = true end end)
-VisRangeBg.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then DraggingVis = true end end)
-UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then DraggingSmooth = false DraggingFOV = false DraggingVis = false end end)
-
-RunService.RenderStepped:Connect(function()
-    FOVCircle.Position = UserInputService:GetMouseLocation()
-    FOVCircle.Radius = Settings.Range
-    local MX = UserInputService:GetMouseLocation().X
-    
-    if DraggingSmooth then
-        local P = math.clamp((MX - SmoothBg.AbsolutePosition.X) / SmoothBg.AbsoluteSize.X, 0.01, 1)
-        Settings.Smoothness = P SmoothFill.Size = UDim2.new(P,0,1,0) SmoothLabel.Text = "Smoothness: "..string.format("%.2f", P)
-    end
-    if DraggingFOV then
-        local P = math.clamp((MX - FOVSliderBg.AbsolutePosition.X) / FOVSliderBg.AbsoluteSize.X, 0.05, 1)
-        Settings.Range = math.floor(P * 500) FOVSliderFill.Size = UDim2.new(P,0,1,0)
-    end
-    if DraggingVis then
-        local P = math.clamp((MX - VisRangeBg.AbsolutePosition.X) / VisRangeBg.AbsoluteSize.X, 0.05, 1)
-        Settings.VisualRange = math.floor(P * 2000) VisRangeFill.Size = UDim2.new(P,0,1,0) VisRangeLabel.Text = "Visuals Range: "..Settings.VisualRange
-    end
-
-    local IsPressed = (Settings.AimKey.EnumType == Enum.KeyCode and UserInputService:IsKeyDown(Settings.AimKey)) or (Settings.AimKey.EnumType == Enum.UserInputType and UserInputService:IsMouseButtonPressed(Settings.AimKey))
-    if Settings.AimbotEnabled and IsPressed then
-        local T = GetClosestPlayer()
-        if T then
-            if Settings.AimbotType == "Camera" then
-                Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, T.Position), Settings.Smoothness)
-            else
-                local Pos, _ = Camera:WorldToViewportPoint(T.Position)
-                local MousePos = UserInputService:GetMouseLocation()
-                mousemoverel((Pos.X - MousePos.X) * Settings.Smoothness, (Pos.Y - MousePos.Y) * Settings.Smoothness)
-            end
+local function LoadConfig()
+    if isfile("uwuHub_Config.json") then
+        local json = readfile("uwuHub_Config.json")
+        local data = HttpService:JSONDecode(json)
+        for i, v in pairs(data) do
+            Settings[i] = v
         end
     end
-end)
-
-TypeBtn.MouseButton1Click:Connect(function() Settings.AimbotType = (Settings.AimbotType == "Camera") and "Mouse" or "Camera" TypeBtn.Text = "Type: "..Settings.AimbotType end)
-PartBtn.MouseButton1Click:Connect(function() Settings.TargetPart = (Settings.TargetPart == "Head") and "HumanoidRootPart" or "Head" PartBtn.Text = "Target: "..(Settings.TargetPart == "Head" and "Head" or "Torso") end)
-TeamToggle.MouseButton1Click:Connect(function() Settings.TeamCheck = not Settings.TeamCheck TeamToggle.Text = "Teamcheck: "..(Settings.TeamCheck and "AN" or "AUS") TeamToggle.BackgroundColor3 = Settings.TeamCheck and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50) end)
-AimToggle.MouseButton1Click:Connect(function() Settings.AimbotEnabled = not Settings.AimbotEnabled AimToggle.Text = "Aimbot: "..(Settings.AimbotEnabled and "AN" or "AUS") AimToggle.BackgroundColor3 = Settings.AimbotEnabled and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50) end)
-FOVToggle.MouseButton1Click:Connect(function() Settings.FOVVisible = not Settings.FOVVisible FOVToggle.Text = "FOV Circle: "..(Settings.FOVVisible and "AN" or "AUS") FOVToggle.BackgroundColor3 = Settings.FOVVisible and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50) FOVCircle.Visible = Settings.FOVVisible end)
-
-local Waiting = false
-KeybindBtn.MouseButton1Click:Connect(function() Waiting = true KeybindBtn.Text = "..." end)
-UserInputService.InputBegan:Connect(function(i, p)
-    if Waiting then
-        if i.UserInputType == Enum.UserInputType.Keyboard then Settings.AimKey = i.KeyCode KeybindBtn.Text = "Aim Key: "..i.KeyCode.Name Waiting = false
-        elseif i.UserInputType == Enum.UserInputType.MouseButton2 then Settings.AimKey = Enum.UserInputType.MouseButton2 KeybindBtn.Text = "Aim Key: Mouse2" Waiting = false end
-    elseif not p and i.KeyCode == Settings.ToggleKey then MainFrame.Visible = not MainFrame.Visible end
-end)
-
-local function CreateESP(Player)
-    local Line = Drawing.new("Line") Line.Color = Color3.fromRGB(255, 0, 0)
-    local Box = Drawing.new("Square")
-    RunService.RenderStepped:Connect(function()
-        if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") and Player ~= LocalPlayer then
-            local isEnemy = (not Settings.TeamCheck or Player.Team ~= LocalPlayer.Team)
-            local root = Player.Character.HumanoidRootPart
-            local dist = (root.Position - Camera.CFrame.Position).Magnitude
-            local Pos, OnScreen = Camera:WorldToViewportPoint(root.Position)
-            local inRange = (dist <= Settings.VisualRange)
-            local highlight = Player.Character:FindFirstChild("uwuCharms")
-
-            if Settings.CharmsEnabled and isEnemy and inRange then
-                if not highlight then highlight = Instance.new("Highlight", Player.Character) highlight.Name = "uwuCharms" end
-                highlight.Enabled = true
-            elseif highlight then highlight.Enabled = false end
-
-            if Settings.TracersEnabled and OnScreen and isEnemy and inRange then
-                Line.Visible = true Line.From = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2) Line.To = Vector2.new(Pos.X, Pos.Y)
-            else Line.Visible = false end
-
-            if Settings.ESPEnabled and OnScreen and isEnemy and inRange then
-                Box.Visible = true Box.Size = Vector2.new(2000/Pos.Z, 2500/Pos.Z) Box.Position = Vector2.new(Pos.X - Box.Size.X/2, Pos.Y - Box.Size.Y/2)
-            else Box.Visible = false end
-        else Line.Visible = false Box.Visible = false end
-    end)
 end
-for _, p in pairs(Players:GetPlayers()) do CreateESP(p) end
-Players.PlayerAdded:Connect(CreateESP)
-CloseBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
+
+local SaveBtn = Instance.new("TextButton", SettingsContent)
+SaveBtn.Size = UDim2.new(0, 380, 0, 35)
+SaveBtn.Position = UDim2.new(0, 0, 0, 30)
+SaveBtn.Text = "💾 Save Configuration"
+SaveBtn.BackgroundColor3 = Color3.fromRGB(180, 120, 255)
+SaveBtn.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", SaveBtn)
+SaveBtn.MouseButton1Click:Connect(SaveConfig)
+
+local LoadBtn = Instance.new("TextButton", SettingsContent)
+LoadBtn.Size = UDim2.new(0, 380, 0, 35)
+LoadBtn.Position = UDim2.new(0, 0, 0, 75)
+LoadBtn.Text = "📂 Load Configuration"
+LoadBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+LoadBtn.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", LoadBtn)
+LoadBtn.MouseButton1Click:Connect(LoadConfig)
+
+-- Schließen Funktion
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)

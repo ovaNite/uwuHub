@@ -10,21 +10,270 @@ local Settings = {
     TeamCheck = true,
     Smoothness = 0.15,
     Range = 200, 
-    AimKey = Enum.KeyCode.E,
+    AimKey = Enum.KeyCode.E, 
     ToggleKey = Enum.KeyCode.RightShift,
-    TargetPart = "Head",
+    TargetPart = "Head", -- Standard: Kopf
     UIVisible = true,
+    CharmsEnabled = false,
     ESPEnabled = false,
-    TrackerEnabled = false
+    TracersEnabled = false
 }
 
 -- 🎨 UI BASE
 local ScreenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
-ScreenGui.Name = "uwuHub_Final"
+ScreenGui.Name = "uwuHub_Final_Pro"
 ScreenGui.ResetOnSpawn = false
 
 local MainFrame = Instance.new("Frame", ScreenGui)
 MainFrame.Size = UDim2.new(0, 500, 0, 380)
+MainFrame.Position = UDim2.new(0.5, -250, 0.5, -190)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.Active = true
+MainFrame.Draggable = true
+Instance.new("UICorner", MainFrame)
+
+-- TITLE & CLOSE
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Text = "  uwu Hub v1.0.0 Beta"
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Font = Enum.Font.GothamBold
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Instance.new("UICorner", Title)
+
+local CloseBtn = Instance.new("TextButton", MainFrame)
+CloseBtn.Text = "X"
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -35, 0, 5)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+CloseBtn.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", CloseBtn)
+
+-- CONTAINERS (TABS)
+local MainContent = Instance.new("Frame", MainFrame)
+MainContent.Size = UDim2.new(1, -20, 1, -100)
+MainContent.Position = UDim2.new(0, 10, 0, 90)
+MainContent.BackgroundTransparency = 1
+
+local ESPContent = Instance.new("Frame", MainFrame)
+ESPContent.Size = UDim2.new(1, -20, 1, -100)
+ESPContent.Position = UDim2.new(0, 10, 0, 90)
+ESPContent.BackgroundTransparency = 1
+ESPContent.Visible = false
+
+-- TAB BUTTONS
+local function CreateTabBtn(name, pos, content)
+    local btn = Instance.new("TextButton", MainFrame)
+    btn.Text = name
+    btn.Size = UDim2.new(0, 100, 0, 30)
+    btn.Position = pos
+    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    Instance.new("UICorner", btn)
+    btn.MouseButton1Click:Connect(function()
+        MainContent.Visible = (content == MainContent)
+        ESPContent.Visible = (content == ESPContent)
+    end)
+end
+
+CreateTabBtn("Main", UDim2.new(0, 10, 0, 50), MainContent)
+CreateTabBtn("ESP", UDim2.new(0, 120, 0, 50), ESPContent)
+
+--- 🔵 MAIN TAB FUNCTIONS ---
+local AimToggle = Instance.new("TextButton", MainContent)
+AimToggle.Size = UDim2.new(0, 110, 0, 40)
+AimToggle.Text = "Aimbot: AUS"
+AimToggle.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+AimToggle.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", AimToggle)
+
+local KeybindBtn = Instance.new("TextButton", MainContent)
+KeybindBtn.Size = UDim2.new(0, 110, 0, 40)
+KeybindBtn.Position = UDim2.new(0, 120, 0, 0)
+KeybindBtn.Text = "Key: " .. Settings.AimKey.Name
+KeybindBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+KeybindBtn.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", KeybindBtn)
+
+-- TARGET PART BUTTON
+local PartBtn = Instance.new("TextButton", MainContent)
+PartBtn.Size = UDim2.new(0, 110, 0, 40)
+PartBtn.Position = UDim2.new(0, 240, 0, 0)
+PartBtn.Text = "Part: Head"
+PartBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+PartBtn.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", PartBtn)
+
+local TeamToggle = Instance.new("TextButton", MainContent)
+TeamToggle.Size = UDim2.new(0, 110, 0, 40)
+TeamToggle.Position = UDim2.new(0, 360, 0, 0)
+TeamToggle.Text = "Team: AN"
+TeamToggle.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+TeamToggle.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", TeamToggle)
+
+-- Smoothness Slider
+local SliderLabel = Instance.new("TextLabel", MainContent)
+SliderLabel.Text = "Smoothness: " .. Settings.Smoothness
+SliderLabel.Position = UDim2.new(0, 0, 0, 55)
+SliderLabel.Size = UDim2.new(0, 200, 0, 20)
+SliderLabel.TextColor3 = Color3.new(1, 1, 1)
+SliderLabel.BackgroundTransparency = 1
+SliderLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local SliderBg = Instance.new("Frame", MainContent)
+SliderBg.Size = UDim2.new(0, 310, 0, 10)
+SliderBg.Position = UDim2.new(0, 0, 0, 80)
+SliderBg.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+Instance.new("UICorner", SliderBg)
+
+local SliderFill = Instance.new("Frame", SliderBg)
+SliderFill.Size = UDim2.new(Settings.Smoothness, 0, 1, 0)
+SliderFill.BackgroundColor3 = Color3.fromRGB(80, 120, 255)
+Instance.new("UICorner", SliderFill)
+
+--- 🟡 ESP TAB FUNCTIONS ---
+local CharmsToggle = Instance.new("TextButton", ESPContent)
+CharmsToggle.Size = UDim2.new(0, 150, 0, 40)
+CharmsToggle.Text = "Charms: AUS"
+CharmsToggle.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+CharmsToggle.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", CharmsToggle)
+
+local EspBoxToggle = Instance.new("TextButton", ESPContent)
+EspBoxToggle.Size = UDim2.new(0, 150, 0, 40)
+EspBoxToggle.Position = UDim2.new(0, 160, 0, 0)
+EspBoxToggle.Text = "Box: AUS"
+EspBoxToggle.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+EspBoxToggle.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", EspBoxToggle)
+
+local TracerToggle = Instance.new("TextButton", ESPContent)
+TracerToggle.Size = UDim2.new(0, 150, 0, 40)
+TracerToggle.Position = UDim2.new(0, 320, 0, 0)
+TracerToggle.Text = "Tracers: AUS"
+TracerToggle.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+TracerToggle.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", TracerToggle)
+
+--- ⚙️ LOGIC & CONNECTIONS ---
+PartBtn.MouseButton1Click:Connect(function()
+    if Settings.TargetPart == "Head" then
+        Settings.TargetPart = "HumanoidRootPart"
+        PartBtn.Text = "Part: Torso"
+    else
+        Settings.TargetPart = "Head"
+        PartBtn.Text = "Part: Head"
+    end
+end)
+
+local WaitingForKey = false
+KeybindBtn.MouseButton1Click:Connect(function() WaitingForKey = true KeybindBtn.Text = "Key: ..." end)
+UserInputService.InputBegan:Connect(function(input)
+    if WaitingForKey then
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            Settings.AimKey = input.KeyCode KeybindBtn.Text = "Key: " .. input.KeyCode.Name WaitingForKey = false
+        elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
+            Settings.AimKey = Enum.UserInputType.MouseButton2 KeybindBtn.Text = "Key: Mouse2" WaitingForKey = false
+        end
+    end
+end)
+
+AimToggle.MouseButton1Click:Connect(function()
+    Settings.AimbotEnabled = not Settings.AimbotEnabled
+    AimToggle.Text = Settings.AimbotEnabled and "Aimbot: AN" or "Aimbot: AUS"
+    AimToggle.BackgroundColor3 = Settings.AimbotEnabled and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
+end)
+
+TeamToggle.MouseButton1Click:Connect(function()
+    Settings.TeamCheck = not Settings.TeamCheck
+    TeamToggle.Text = Settings.TeamCheck and "Team: AN" or "Team: AUS"
+    TeamToggle.BackgroundColor3 = Settings.TeamCheck and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
+end)
+
+CharmsToggle.MouseButton1Click:Connect(function()
+    Settings.CharmsEnabled = not Settings.CharmsEnabled
+    CharmsToggle.Text = Settings.CharmsEnabled and "Charms: AN" or "Charms: AUS"
+    CharmsToggle.BackgroundColor3 = Settings.CharmsEnabled and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
+end)
+
+EspBoxToggle.MouseButton1Click:Connect(function()
+    Settings.ESPEnabled = not Settings.ESPEnabled
+    EspBoxToggle.Text = Settings.ESPEnabled and "Box: AN" or "Box: AUS"
+    EspBoxToggle.BackgroundColor3 = Settings.ESPEnabled and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
+end)
+
+TracerToggle.MouseButton1Click:Connect(function()
+    Settings.TracersEnabled = not Settings.TracersEnabled
+    TracerToggle.Text = Settings.TracersEnabled and "Tracers: AN" or "Tracers: AUS"
+    TracerToggle.BackgroundColor3 = Settings.TracersEnabled and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
+end)
+
+-- Slider Logic
+local Dragging = false
+local function UpdateSlider()
+    local Percent = math.clamp((UserInputService:GetMouseLocation().X - SliderBg.AbsolutePosition.X) / SliderBg.AbsoluteSize.X, 0.01, 1)
+    Settings.Smoothness = Percent SliderFill.Size = UDim2.new(Percent, 0, 1, 0) SliderLabel.Text = "Smoothness: " .. string.format("%.2f", Percent)
+end
+SliderBg.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then Dragging = true UpdateSlider() end end)
+UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then Dragging = false end end)
+UserInputService.InputChanged:Connect(function(i) if Dragging and i.UserInputType == Enum.UserInputType.MouseMovement then UpdateSlider() end end)
+
+--- 👁️ ESP SYSTEM ---
+local function CreateVisuals(Player)
+    local Line = Drawing.new("Line")
+    Line.Color = Color3.fromRGB(255, 0, 0) -- Rote Tracers
+    Line.Thickness = 1
+    local Box = Drawing.new("Square")
+    RunService.RenderStepped:Connect(function()
+        if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") and Player ~= LocalPlayer then
+            local highlight = Player.Character:FindFirstChild("uwuCharms")
+            local isEnemy = (not Settings.TeamCheck or Player.Team ~= LocalPlayer.Team)
+            local Pos, OnScreen = Camera:WorldToViewportPoint(Player.Character.HumanoidRootPart.Position)
+
+            -- Tracers vom Crosshair (Bildschirmmitte)
+            if Settings.TracersEnabled and OnScreen and isEnemy then
+                Line.Visible = true 
+                Line.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2) 
+                Line.To = Vector2.new(Pos.X, Pos.Y)
+            else Line.Visible = false end
+
+            -- Charms & Box (wie bisher)
+            if Settings.CharmsEnabled and isEnemy then
+                if not highlight then highlight = Instance.new("Highlight", Player.Character) end
+                highlight.Enabled = true
+            elseif highlight then highlight.Enabled = false end
+
+            if Settings.ESPEnabled and OnScreen and isEnemy then
+                Box.Visible = true Box.Size = Vector2.new(2000/Pos.Z, 2500/Pos.Z) Box.Position = Vector2.new(Pos.X - Box.Size.X/2, Pos.Y - Box.Size.Y/2)
+            else Box.Visible = false end
+        else Line.Visible = false Box.Visible = false end
+    end)
+end
+for _, p in pairs(Players:GetPlayers()) do CreateVisuals(p) end
+Players.PlayerAdded:Connect(CreateVisuals)
+
+--- 🎯 AIMBOT ENGINE ---
+RunService.RenderStepped:Connect(function()
+    local IsPressed = (Settings.AimKey.EnumType == Enum.KeyCode and UserInputService:IsKeyDown(Settings.AimKey)) or (Settings.AimKey.EnumType == Enum.UserInputType and UserInputService:IsMouseButtonPressed(Settings.AimKey))
+    if Settings.AimbotEnabled and IsPressed then
+        local Target, MaxDist = nil, Settings.Range
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild(Settings.TargetPart) then
+                if not Settings.TeamCheck or p.Team ~= LocalPlayer.Team then
+                    local Pos, OnScreen = Camera:WorldToViewportPoint(p.Character[Settings.TargetPart].Position)
+                    local Dist = (Vector2.new(Pos.X, Pos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                    if OnScreen and Dist < MaxDist then Target = p.Character[Settings.TargetPart] MaxDist = Dist end
+                end
+            end
+        end
+        if Target then Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, Target.Position), Settings.Smoothness) end
+    end
+end)
+
+CloseBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
+UserInputService.InputBegan:Connect(function(i, p) if not p and i.KeyCode == Settings.ToggleKey then MainFrame.Visible = not MainFrame.Visible end end)
 MainFrame.Position = UDim2.new(0.5, -250, 0.5, -190)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MainFrame.Active = true

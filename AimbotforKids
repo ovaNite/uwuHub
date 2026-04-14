@@ -1,0 +1,180 @@
+-- [[ 🛡️ UWU HUB PREMIER ELITE v26 - EVERYTHING INCLUDED ]] --
+
+-- 🔊 1. SOUND SYSTEM
+local function PlayUwuSound()
+    local s = Instance.new("Sound", game:GetService("SoundService"))
+    s.SoundId = "rbxassetid://9040544327" -- Anime Ahh
+    s.Volume = 5; s:Play()
+    task.delay(3, function() s:Destroy() end)
+end
+
+-- 🖼️ 2. FULLSCREEN WAIFU
+local function ShowEGirlFullscreen()
+    local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+    ScreenGui.DisplayOrder = 999
+    local Image = Instance.new("ImageLabel", ScreenGui)
+    Image.Size = UDim2.new(1, 0, 0.9, 100)
+    Image.Image = "http://www.roblox.com/asset/?id=105797247943918"
+    Image.ScaleType = Enum.ScaleType.Crop
+    Image.BackgroundColor3 = Color3.new(0,0,0)
+    PlayUwuSound()
+    task.wait(3)
+    ScreenGui:Destroy()
+end
+
+-- 🚫 3. ANTI-STACK & RE-EXECUTE NOTIFY
+if _G.UwuHubLoaded then
+    if _G.UwuJanitor then _G.UwuJanitor:Clean() end
+    if game.CoreGui:FindFirstChild("UwuHubGui") then game.CoreGui.UwuHubGui:Destroy() end
+    
+    local function ReExecuteNotify()
+        local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+        local Frame = Instance.new("Frame", ScreenGui)
+        Frame.Size = UDim2.new(0, 250, 0, 60); Frame.Position = UDim2.new(1, -270, 1, 100)
+        Frame.BackgroundColor3 = Color3.fromRGB(30, 0, 50); Instance.new("UICorner", Frame)
+        local Text = Instance.new("TextLabel", Frame)
+        Text.Size = UDim2.new(1, 0, 1, 0); Text.Text = "🥵 Fuck me daddy"; Text.TextColor3 = Color3.new(1, 1, 1)
+        Text.Font = "GothamBold"; Text.TextSize = 18; Text.BackgroundTransparency = 1
+        PlayUwuSound()
+        Frame:TweenPosition(UDim2.new(1, -270, 1, -80), "Out", "Back", 0.5)
+        task.wait(2); Frame:TweenPosition(UDim2.new(1, -270, 1, 150), "In", "Quad", 0.5)
+        task.delay(0.6, function() ScreenGui:Destroy() end)
+    end
+    task.spawn(ReExecuteNotify)
+end
+
+_G.UwuHubLoaded = true
+local Janitor = { Connections = {}, Drawings = {} }
+_G.UwuJanitor = Janitor
+function Janitor:Add(c) table.insert(self.Connections, c) return c end
+function Janitor:AddDrawing(d) table.insert(self.Drawings, d) return d end
+function Janitor:Clean() 
+    for _, c in pairs(self.Connections) do if c then c:Disconnect() end end 
+    for _, d in pairs(self.Drawings) do if d then d:Remove() end end
+    _G.UwuHubLoaded = false
+end
+
+-- --- 4. SERVICES & SETTINGS --- --
+local Players, RunService, UIS = game:GetService("Players"), game:GetService("RunService"), game:GetService("UserInputService")
+local LP, Camera = Players.LocalPlayer, workspace.CurrentCamera
+
+local Settings = {
+    Aimbot = false, AimPower = 10, AimRadius = 150, MaxDist = 600,
+    ESP = false, Fling = false, TeamCheck = true, AimPart = "Head",
+    MenuKey = Enum.KeyCode.RightAlt
+}
+
+-- --- 5. TARGET FINDER (STEALTH) --- --
+local function GetClosestTarget()
+    local target, shortest = nil, Settings.AimRadius
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= LP and v.Character and v.Character:FindFirstChild(Settings.AimPart) and v.Character:FindFirstChild("HumanoidRootPart") then
+            if Settings.TeamCheck and (v.Team == LP.Team or v.TeamColor == LP.TeamColor) then continue end
+            local dist = (LP.Character.HumanoidRootPart.Position - v.Character.HumanoidRootPart.Position).Magnitude
+            if dist > Settings.MaxDist then continue end
+            if v.Character.Humanoid.Health <= 0 then continue end
+
+            local pos, vis = Camera:WorldToViewportPoint(v.Character[Settings.AimPart].Position)
+            if vis then
+                local mDist = (Vector2.new(pos.X, pos.Y) - UIS:GetMouseLocation()).Magnitude
+                if mDist < shortest then target = v; shortest = mDist end
+            end
+        end
+    end
+    return target
+end
+
+-- --- 6. UI CONSTRUCTION --- --
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui); ScreenGui.Name = "UwuHubGui"
+local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 450, 0, 450); Main.Position = UDim2.new(0.5, -225, 0.5, -225); Main.BackgroundColor3 = Color3.fromRGB(12, 12, 14); Main.BorderSizePixel = 0
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
+
+local TitleBar = Instance.new("Frame", Main); TitleBar.Size = UDim2.new(1, 0, 0, 35); TitleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 25); TitleBar.BorderSizePixel = 0
+Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 10)
+local TitleText = Instance.new("TextLabel", TitleBar); TitleText.Size = UDim2.new(1, -100, 1, 0); TitleText.Position = UDim2.new(0, 15, 0, 0); TitleText.Text = "UWU HUB PREMIER ELITE v27"; TitleText.TextColor3 = Color3.new(1,1,1); TitleText.Font = "GothamBold"; TitleText.TextSize = 14; TitleText.BackgroundTransparency = 1; TitleText.TextXAlignment = "Left"
+
+-- Buttons (_ : X)
+local function CreateBtn(txt, pos, callback)
+    local b = Instance.new("TextButton", TitleBar); b.Size = UDim2.new(0, 25, 0, 25); b.Position = UDim2.new(1, pos, 0.5, -12); b.Text = txt; b.BackgroundColor3 = Color3.fromRGB(35, 35, 40); b.TextColor3 = Color3.new(1,1,1); b.Font = "GothamBold"; b.MouseButton1Click:Connect(callback)
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4) return b
+end
+CreateBtn("_", -65, function() Main.Visible = false end)
+CreateBtn("X", -35, function() Janitor:Clean(); ScreenGui:Destroy() end).BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+
+-- Dragging
+local dragging, dragStart, startPos
+TitleBar.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true; dragStart = i.Position; startPos = Main.Position end end)
+UIS.InputChanged:Connect(function(i) if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+    local delta = i.Position - dragStart; Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end end)
+UIS.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+
+local Content = Instance.new("ScrollingFrame", Main); Content.Size = UDim2.new(1, -20, 1, -60); Content.Position = UDim2.new(0, 10, 0, 50); Content.BackgroundTransparency = 1; Content.ScrollBarThickness = 0
+Instance.new("UIListLayout", Content).Padding = UDim.new(0, 8)
+
+-- BLUE SLIDER
+local function AddSlider(name, min, max, prop)
+    local sFrame = Instance.new("Frame", Content); sFrame.Size = UDim2.new(1, -10, 0, 50); sFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25); Instance.new("UICorner", sFrame)
+    local label = Instance.new("TextLabel", sFrame); label.Size = UDim2.new(1, -20, 0, 25); label.Position = UDim2.new(0, 10, 0, 5); label.Text = name .. ": " .. Settings[prop]; label.TextColor3 = Color3.new(1,1,1); label.Font = "Gotham"; label.BackgroundTransparency = 1; label.TextXAlignment = "Left"
+    local sliderBg = Instance.new("Frame", sFrame); sliderBg.Size = UDim2.new(1, -20, 0, 4); sliderBg.Position = UDim2.new(0, 10, 0, 35); sliderBg.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+    local sliderFill = Instance.new("Frame", sliderBg); sliderFill.Size = UDim2.new((Settings[prop]-min)/(max-min), 0, 1, 0); sliderFill.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    local active = false
+    local function Update(input)
+        local pos = math.clamp((input.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
+        Settings[prop] = math.round(min + (pos * (max - min))); label.Text = name .. ": " .. Settings[prop]; sliderFill.Size = UDim2.new(pos, 0, 1, 0)
+    end
+    sFrame.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then active = true; Update(i) end end)
+    UIS.InputChanged:Connect(function(i) if active and i.UserInputType == Enum.UserInputType.MouseMovement then Update(i) end end)
+    UIS.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then active = false end end)
+end
+
+-- TOGGLES
+local function AddToggle(name, prop)
+    local b = Instance.new("TextButton", Content); b.Size = UDim2.new(1, -10, 0, 35); b.BackgroundColor3 = Color3.fromRGB(25, 25, 30); b.Text = "  "..name; b.TextColor3 = Color3.new(1,1,1); b.Font = "Gotham"; b.TextXAlignment = "Left"
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+    local ind = Instance.new("Frame", b); ind.Size = UDim2.new(0, 30, 0, 15); ind.Position = UDim2.new(1, -40, 0.5, -7); ind.BackgroundColor3 = Settings[prop] and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(60,60,60)
+    Instance.new("UICorner", ind).CornerRadius = UDim.new(1,0)
+    b.MouseButton1Click:Connect(function() Settings[prop] = not Settings[prop]; ind.BackgroundColor3 = Settings[prop] and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(60,60,60) end)
+end
+
+AddToggle("Enable Aimbot", "Aimbot")
+AddSlider("Aim Speed", 1, 50, "AimPower")
+AddSlider("FOV Radius", 30, 800, "AimRadius")
+AddSlider("Aim Range (Studs)", 50, 2500, "MaxDist")
+AddToggle("Highlight ESP", "ESP")
+AddToggle("Fling After Kill", "Fling")
+AddToggle("Team Check", "TeamCheck")
+
+-- --- 7. MAIN LOOP --- --
+Janitor:Add(RunService.Heartbeat:Connect(function()
+    if Settings.ESP then
+        for _, v in pairs(Players:GetPlayers()) do
+            if v ~= LP and v.Character then
+                local h = v.Character:FindFirstChild("UwuESP") or Instance.new("Highlight", v.Character)
+                h.Name = "UwuESP"; h.FillColor = (v.Team == LP.Team) and Color3.new(0,1,0) or Color3.fromRGB(255, 0, 80); h.Enabled = true
+            end
+        end
+    end
+end))
+
+Janitor:Add(RunService.RenderStepped:Connect(function()
+    if Settings.Aimbot and UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        local t = GetClosestTarget()
+        if t and t.Character then
+            local p = Camera:WorldToViewportPoint(t.Character[Settings.AimPart].Position)
+            local m = UIS:GetMouseLocation()
+            local jitter = math.random(-50, 50) / 1000 -- Stealth Jitter
+            local smooth = (51 - Settings.AimPower) + jitter
+            if mousemoverel then mousemoverel((p.X-m.X)/smooth, (p.Y-m.Y)/smooth) end
+            
+            if Settings.Fling and t.Character.Humanoid.Health <= 0 then
+                LP.Character.HumanoidRootPart.CFrame = t.Character.HumanoidRootPart.CFrame
+                LP.Character.HumanoidRootPart.Velocity = Vector3.new(0, 5000, 0)
+            end
+        end
+    end
+end))
+
+UIS.InputBegan:Connect(function(i) if i.KeyCode == Settings.MenuKey then Main.Visible = not Main.Visible end end)
+
+task.spawn(function() ShowEGirlFullscreen(); print("UWU HUB v27 LOADED ✅") end)

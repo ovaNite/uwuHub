@@ -1,0 +1,190 @@
+--[[
+    🛡️ RED HUB PREMIER ELITE v10.700 - THE OMEGA PERFORMANCE KERNEL
+    DEVELOPER: INTEGRATED AI ASSISTANT CORE
+    ENGINE: ANTI-MEMORY-LEAK & DYNAMIC RED ESP
+    STATUS: DRAGGABLE | REACH-CALIBRATED | RED THEME
+]]
+
+-- --- [ 1. INITIALISIERUNG & KERNEL PROTECTOR ] --- --
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local LP = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- RE-EXECUTION PROTECTION (REINIGUNG)
+if _G.RedHubLoaded then
+    pcall(function() _G.UwuJanitor:Clean() end)
+end
+
+_G.RedHubLoaded = true
+local Janitor = { Connections = {}, Drawings = {}, Instances = {} }
+_G.UwuJanitor = Janitor
+
+function Janitor:Add(c) table.insert(self.Connections, c); return c end
+function Janitor:AddDrawing(d) table.insert(self.Drawings, d); return d end
+function Janitor:AddInst(i) table.insert(self.Instances, i); return i end
+function Janitor:Clean()
+    _G.RedHubLoaded = false
+    for _, c in pairs(self.Connections) do pcall(function() c:Disconnect() end) end
+    for _, d in pairs(self.Drawings) do pcall(function() d:Remove() end) end
+    for _, i in pairs(self.Instances) do pcall(function() i:Destroy() end) end
+end
+
+-- --- [ 2. SETTINGS DATABASE ] --- --
+local Settings = {
+    Aimbot = false,
+    AimPower = 4,
+    AimRadius = 150,
+    MaxDist = 2500,
+    AimPart = "Head",
+    TeamCheck = true,
+    ShowFOV = true,
+    -- VISUALS (NEU)
+    ESP = false,
+    ESP_Color = Color3.fromRGB(255, 0, 0), -- Reines Rot
+    -- MODS
+    WalkSpeed = 0,
+    MenuKey = Enum.KeyCode.RightAlt
+}
+
+local AICore = { LockedTarget = nil }
+
+-- --- [ 3. 🛡️ ANTI-LEAK ENGINE ] --- --
+local function ClearPlayerData(player)
+    pcall(function()
+        if player.Character then
+            local hl = player.Character:FindFirstChild("RedMatrixHL")
+            if hl then hl:Destroy() end
+        end
+        if AICore.LockedTarget == player then AICore.LockedTarget = nil end
+    end)
+end
+
+-- Cleanup-Hook
+Janitor:Add(Players.PlayerRemoving:Connect(ClearPlayerData))
+
+-- --- [ 4. TARGETING ENGINE ] --- --
+local function GetCorrectedMousePos() return UIS:GetMouseLocation() end
+local function IsAlive(v) return v and v.Character and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 end
+local function IsOnMyTeam(v) return Settings.TeamCheck and (v.Team == LP.Team or v.TeamColor == LP.TeamColor) end
+
+local function GetBestTarget()
+    local target, shortest = nil, Settings.AimRadius
+    local mouseLoc = GetCorrectedMousePos()
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= LP and IsAlive(v) and not IsOnMyTeam(v) then
+            local root = v.Character:FindFirstChild("HumanoidRootPart")
+            if root and (root.Position - LP.Character.HumanoidRootPart.Position).Magnitude <= Settings.MaxDist then
+                local pos, vis = Camera:WorldToViewportPoint(v.Character[Settings.AimPart].Position)
+                if vis then
+                    local mDist = (Vector2.new(pos.X, pos.Y) - mouseLoc).Magnitude
+                    if mDist < shortest then target = v; shortest = mDist end
+                end
+            end
+        end
+    end
+    return target
+end
+
+-- --- [ 5. UI CONSTRUCTION (RED HUB STYLE + TOP BAR) ] --- --
+local ScreenGui = Janitor:AddInst(Instance.new("ScreenGui", game:GetService("CoreGui")))
+local Main = Instance.new("Frame", ScreenGui)
+Main.Size = UDim2.new(0, 500, 0, 600); Main.Position = UDim2.new(0.5, -250, 0.5, -300); Main.BackgroundColor3 = Color3.fromRGB(15, 0, 0); Main.BorderSizePixel = 0
+Janitor:AddInst(Instance.new("UICorner", Main))
+
+-- TOP BAR (DRAGGABLE)
+local TopBar = Instance.new("Frame", Main)
+TopBar.Size = UDim2.new(1, 0, 0, 40); TopBar.BackgroundColor3 = Color3.fromRGB(40, 0, 0); TopBar.BorderSizePixel = 0
+Janitor:AddInst(Instance.new("UICorner", TopBar))
+local Title = Instance.new("TextLabel", TopBar)
+Title.Size = UDim2.new(1, -20, 1, 0); Title.Position = UDim2.new(0, 15, 0, 0); Title.Text = "🔴 RED HUB v10.700 [ANTI-LEAK]"; Title.TextColor3 = Color3.new(1,1,1); Title.Font = "GothamBold"; Title.TextSize = 14; Title.BackgroundTransparency = 1; Title.TextXAlignment = "Left"
+
+-- DRAGGING LOGIK
+local dragging, dragStart, startPos
+TopBar.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true; dragStart = i.Position; startPos = Main.Position end end)
+UIS.InputChanged:Connect(function(i) if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then local delta = i.Position - dragStart; Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y) end end)
+UIS.InputEnded:Connect(function() dragging = false end)
+
+-- CONTENT
+local Content = Instance.new("ScrollingFrame", Main); Content.Size = UDim2.new(1, -20, 1, -60); Content.Position = UDim2.new(0, 10, 0, 50); Content.BackgroundTransparency = 1; Content.ScrollBarThickness = 0
+Instance.new("UIListLayout", Content).Padding = UDim.new(0, 10)
+
+local function AddToggle(name, prop)
+    local b = Instance.new("TextButton", Content); b.Size = UDim2.new(1, -10, 0, 45); b.BackgroundColor3 = Color3.fromRGB(30, 0, 0); b.Text = "  " .. name; b.TextColor3 = Color3.new(1,1,1); b.Font = "GothamBold"; b.TextXAlignment = "Left"; Janitor:AddInst(Instance.new("UICorner", b))
+    b.MouseButton1Click:Connect(function() Settings[prop] = not Settings[prop] b.BackgroundColor3 = Settings[prop] and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(30, 0, 0) end)
+end
+
+local function AddSlider(name, min, max, prop)
+    local f = Instance.new("Frame", Content); f.Size = UDim2.new(1, -10, 0, 55); f.BackgroundTransparency = 1
+    local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1, 0, 0, 20); l.Text = name .. ": " .. Settings[prop]; l.TextColor3 = Color3.new(1,1,1); l.Font = "Gotham"; l.BackgroundTransparency = 1
+    local bg = Instance.new("Frame", f); bg.Size = UDim2.new(1, -10, 0, 4); bg.Position = UDim2.new(0, 5, 0, 35); bg.BackgroundColor3 = Color3.new(0.2, 0, 0)
+    local fill = Instance.new("Frame", bg); fill.Size = UDim2.new((Settings[prop]-min)/(max-min), 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    f.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then 
+        local move = RunService.RenderStepped:Connect(function()
+            local p = math.clamp((GetCorrectedMousePos().X - bg.AbsolutePosition.X) / bg.AbsoluteSize.X, 0, 1)
+            Settings[prop] = math.round(min + (p * (max - min))); l.Text = name .. ": " .. Settings[prop]; fill.Size = UDim2.new(p, 0, 1, 0)
+        end)
+        UIS.InputEnded:Connect(function(e) if e.UserInputType == Enum.UserInputType.MouseButton1 then move:Disconnect() end end)
+    end end)
+end
+
+AddToggle("Enable Red Aimbot", "Aimbot")
+AddToggle("Red Matrix ESP", "ESP")
+AddSlider("Aimbot Reach", 100, 5000, "MaxDist")
+AddSlider("Smoothness", 1, 50, "AimPower")
+AddSlider("FOV Circle", 10, 800, "AimRadius")
+AddSlider("Speed Bypass", 0, 15, "WalkSpeed")
+AddToggle("Team Check", "TeamCheck")
+
+-- --- [ 6. MASTER PERFORMANCE LOOP ] --- --
+local FOVCircle = Janitor:AddDrawing(Drawing.new("Circle"))
+FOVCircle.Thickness = 2; FOVCircle.Color = Color3.fromRGB(255, 0, 0); FOVCircle.Transparency = 0.8; FOVCircle.NumSides = 128
+
+Janitor:Add(RunService.RenderStepped:Connect(function()
+    local mouseLoc = GetCorrectedMousePos()
+    FOVCircle.Visible = Settings.ShowFOV; FOVCircle.Radius = Settings.AimRadius; FOVCircle.Position = mouseLoc
+
+    -- AIMBOT (OPTIMIZED TARGET LOCK)
+    if Settings.Aimbot and UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        if not AICore.LockedTarget or not IsAlive(AICore.LockedTarget) or IsOnMyTeam(AICore.LockedTarget) then
+            AICore.LockedTarget = GetBestTarget()
+        end
+        if AICore.LockedTarget then
+            local pos, vis = Camera:WorldToViewportPoint(AICore.LockedTarget.Character[Settings.AimPart].Position)
+            if vis and (Vector2.new(pos.X, pos.Y) - mouseLoc).Magnitude <= Settings.AimRadius + 100 then
+                mousemoverel((pos.X - mouseLoc.X) / Settings.AimPower, (pos.Y - mouseLoc.Y) / Settings.AimPower)
+            else AICore.LockedTarget = nil end
+        end
+    else AICore.LockedTarget = nil end
+
+    -- SPEED
+    if LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") and Settings.WalkSpeed > 0 then
+        if LP.Character.Humanoid.MoveDirection.Magnitude > 0 then
+            LP.Character.HumanoidRootPart.CFrame = LP.Character.HumanoidRootPart.CFrame + (LP.Character.Humanoid.MoveDirection * (Settings.WalkSpeed / 5))
+        end
+    end
+
+    -- RED ESP (WITH PERFORMANCE PROTECTION)
+    if Settings.ESP then
+        for _, v in pairs(Players:GetPlayers()) do
+            if v ~= LP and v.Character then
+                local hl = v.Character:FindFirstChild("RedMatrixHL")
+                if IsAlive(v) and not IsOnMyTeam(v) then
+                    if not hl then
+                        hl = Instance.new("Highlight", v.Character)
+                        hl.Name = "RedMatrixHL"
+                        hl.FillColor = Settings.ESP_Color; hl.FillTransparency = 0.5; hl.OutlineColor = Color3.new(1,1,1)
+                    end
+                    hl.Enabled = true
+                else
+                    if hl then hl.Enabled = false end
+                end
+            end
+        end
+    end
+end))
+
+Janitor:Add(UIS.InputBegan:Connect(function(i, g) if not g and i.KeyCode == Settings.MenuKey then Main.Visible = not Main.Visible end end))
+
+print("🛡️ Red Hub v10.700 LOADED. ESP & ANTI-LEAK ACTIVE.")

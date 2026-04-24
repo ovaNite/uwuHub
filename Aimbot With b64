@@ -20,5 +20,3 @@ local function decodeBase64(data)
 end
 
 loadstring(decodeBase64(b64))()
-
-Print("loadet Success")

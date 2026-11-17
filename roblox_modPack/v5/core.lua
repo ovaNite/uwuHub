@@ -784,7 +784,7 @@ local function buildWeather()
     state.weatherDroppedPhysicsTime = 0
     local snow = weather.mode == "SNOW"
     local count = math.clamp(math.floor((snow and CONFIG.SnowFlakes or CONFIG.RainDrops)
-        * state.weatherIntensity), 45, 240)
+        * state.weatherIntensity), 2, 260)
     for i = 1, count do
         local p = makeWeatherPart(snow and "Snow" or "Rain", snow and Enum.PartType.Ball or Enum.PartType.Block,
             snow and Vector3.new(0.13, 0.13, 0.13) or Vector3.new(0.035, 1.05, 0.035),

@@ -2,7 +2,7 @@
 -- Paste this one file into an executor that supports loadstring & game:HttpGet.
 -- Modules are pinned to a specific immutable Git commit, not a mutable branch.
 -- No hidden payloads, account collection, remote telemetry or anti-debugging.
-local REV="1038ab8b9b26821cf76a75c591ac48142e81406b"
+local REV="99880128b054b7ffb4c8ea85f32caa1eeb4cba51"
 local ROOT="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/roblox_modPack/v5/"
 local function envTable()
     local e=_G
@@ -30,7 +30,7 @@ local function import(name)
     if not fn then error("[RM5] Compilation error in "..name..": "..tostring(err)) end
     return fn
 end
-local ok,err=pcall(function() import("core.lua")() end)
+local ok,err=pcall(function() import("dist/core.lua")() end)
 if not ok then
     warn("[RM5] Core load failed: "..tostring(err));return
 end
@@ -88,7 +88,7 @@ end
 env.roblox_modPack_v5=ctx
 
 local loaded,errors={},{}
-for _,name in ipairs({"body.lua","surface.lua","worldfx.lua","ui.lua"}) do
+for _,name in ipairs({"dist/body.lua","dist/surface.lua","dist/worldfx.lua","dist/ui.lua"}) do
     local successful,why=pcall(function()
         local factory=import(name)()
         if type(factory)~="function" then

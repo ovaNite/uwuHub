@@ -2,7 +2,7 @@
 -- Developers: Klaus (Dev), Nexus (Bug Fixer)
 -- Loads original 7466-line template as UI + main core, plus optional
 -- 90Hz weather, compatibility checker and integrated Weather/Diagnostics tabs.
-local REV="ec86e5d7bb527152bd1b0bd6700af71b04a242fa"
+local REV="2df577a270a78151c9afa2f7b7b9340e45a38f4d"
 local BASE="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/novax/v1/"
 local env=(getgenv and getgenv()) or _G
 if type(loadstring)~="function" then

@@ -3,7 +3,7 @@
 -- Loads original 7466-line template as UI + main core, plus optional
 -- 90Hz weather, compatibility checker and integrated Weather/Diagnostics tabs.
 local REV="2df577a270a78151c9afa2f7b7b9340e45a38f4d"
-local CORE_REV="e9e8d0e92409f890ce26f9deae5363f191970b31"
+local CORE_REV="23e7d04d03c13a0020aea66c6fbbe60b538486f8"
 local BASE="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/novax/v1/"
 local env=(getgenv and getgenv()) or _G
 if type(loadstring)~="function" then

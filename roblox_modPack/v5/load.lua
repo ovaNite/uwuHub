@@ -2,7 +2,7 @@
 -- Paste this one file into an executor that supports loadstring & game:HttpGet.
 -- Modules are pinned to a specific immutable Git commit, not a mutable branch.
 -- No hidden payloads, account collection, remote telemetry or anti-debugging.
-local REV="99880128b054b7ffb4c8ea85f32caa1eeb4cba51"
+local REV="cd8d4f5b1e01aa79f4e6b241e3d1a7b957f5b375"
 local ROOT="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/roblox_modPack/v5/"
 local function envTable()
     local e=_G
@@ -46,7 +46,7 @@ local ctx={
     Workspace=game:GetService("Workspace"),
     Lighting=game:GetService("Lighting"),
     RunService=R, UserInputService=game:GetService("UserInputService"),
-    Stats={},Options={Fire=true,Foliage=true,Scope=true},
+    Stats={},Options={Fire=true,Foliage=true,Scope=true,Optics=true},
     PhysicsHz=90,PhysicsActual=0,PhysicsSkipped=0,
     Revision=REV,
 }
@@ -88,7 +88,7 @@ end
 env.roblox_modPack_v5=ctx
 
 local loaded,errors={},{}
-for _,name in ipairs({"dist/body.lua","dist/surface.lua","dist/worldfx.lua","dist/ui.lua"}) do
+for _,name in ipairs({"dist/body.lua","dist/surface.lua","dist/worldfx.lua","dist/optics.lua","dist/ui.lua"}) do
     local successful,why=pcall(function()
         local factory=import(name)()
         if type(factory)~="function" then

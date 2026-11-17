@@ -89,11 +89,11 @@ return function(ctx)
     anim(scale,{Scale=1},.26)
     local background=make("ImageLabel",{
         Size=UDim2.fromScale(1,1),BackgroundTransparency=1,
-        Image="",ImageTransparency=.88,ScaleType=Enum.ScaleType.Crop,ZIndex=2
+        Image="",ImageTransparency=.32,ScaleType=Enum.ScaleType.Crop,ZIndex=2
     },panel)
     local bgveil=make("Frame",{
         Size=UDim2.fromScale(1,1),
-        BackgroundColor3=palette.window,BackgroundTransparency=.23,
+        BackgroundColor3=palette.window,BackgroundTransparency=.38,
         BorderSizePixel=0,ZIndex=3
     },panel)
     local top=make("Frame",{

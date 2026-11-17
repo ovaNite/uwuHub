@@ -27,7 +27,7 @@ local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
 if not LocalPlayer then
-    warn("[RM v4] Kein LocalPlayer. Dieses Skript benoetigt einen Client-Kontext.")
+    warn("[RM v6] Kein LocalPlayer. Dieses Skript benoetigt einen Client-Kontext.")
     return
 end
 
@@ -509,7 +509,7 @@ local function scanWorldAsync()
             state.scanComplete = true
             state.scanning = false
             print(string.format(
-                "[RM v4] Scan: %d Instanzen, %d Weltoberflaechen, %d Lichtquellen geaendert.",
+                "[RM v6] Scan: %d Instanzen, %d Weltoberflaechen, %d Lichtquellen geaendert.",
                 state.worldVisited, state.worldChanged, state.lightsChanged
             ))
         end
@@ -845,7 +845,7 @@ local function setWeatherMode(mode)
             applySkyAndClouds()
         end
     end
-    print("[RM v4] " .. mode .. " / " .. tostring(state.weatherIntensity) .. "x")
+    print("[RM v6] " .. mode .. " / " .. tostring(state.weatherIntensity) .. "x")
 end
 state.SetWeatherMode = setWeatherMode
 local function cycleWeather()
@@ -1192,7 +1192,7 @@ local function report()
     return table.concat(out, "\n")
 end
 state.GetReport = report
-state.PrintReport = function() print("[RM v4]\n" .. report()) end
+state.PrintReport = function() print("[RM v6]\n" .. report()) end
 
 local function updateUI()
     if statusButton then
@@ -1374,4 +1374,4 @@ end)
 
 setEnabled(true)
 state.PrintReport()
-print("[RM v4.1] 90 Hz fixed-step Physik | F8 an/aus | F6 Bericht | F7 Regen/Schnee/Aus | F9 Wetterstaerke. Darstellung folgt Client-FPS; keine Serverfluide.")
+print("[RM v6] 90 Hz fixed-step Physik | F8 an/aus | F6 Bericht | F7 Regen/Schnee/Aus | F9 Wetterstaerke. Darstellung folgt Client-FPS; keine Serverfluide.")

@@ -13,14 +13,20 @@ return function(env)
   local blocked={"password","cookie","token","secret","credential","auth","session"}
   local function hasAny(name,list)
     local n=string.lower(tostring(name))
-    for _,v in ipairs(list) do if string.find(n,v,1,true) then return true end end
+    for _,v in ipairs(list) do
+      if v=="bow" then
+        if string.find(n,"%f[%a]bow%f[%A]") then return true end
+      elseif string.find(n,v,1,true) then return true end
+    end
     return false
   end
   local function cleanName(name)
     local s=tostring(name)
     if hasAny(s,blocked) then return "[redacted]" end
     for _,p in ipairs(Players:GetPlayers()) do
-      if s==p.Name or s==p.DisplayName or s==tostring(p.UserId) then return "[player]" end
+      for _,identity in ipairs({p.Name,p.DisplayName,tostring(p.UserId)}) do
+        if #identity>0 and string.find(string.lower(s),string.lower(identity),1,true) then return "[player]" end
+      end
     end
     return string.sub(s,1,80)
   end
@@ -57,7 +63,7 @@ return function(env)
             queue[index]=false
             index+=1
             local obj=item.obj
-            if obj and not blockedChars[obj] and not (root.label=="Workspace" and obj==character) and not hasAny(obj.Name,blocked) then
+            if obj and obj.Name~="NovaX_Weather_LocalVisuals" and not blockedChars[obj] and not (root.label=="Workspace" and obj==character) and not hasAny(obj.Name,blocked) then
               visited+=1;total+=1
               local isScript=obj:IsA("LuaSourceContainer")
               local isRemote=obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")

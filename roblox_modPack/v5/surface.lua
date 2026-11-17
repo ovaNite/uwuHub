@@ -6,7 +6,12 @@ return function(ctx)
     local pool,cells={},{}
     local rng=Random.new()
     local MAX=95
-    local t,probeAccum,renderAccum=0,0,0
+    local t,probeAccum,renderAccum,footAccum=0,0,0,0
+    local snowSound=Instance.new("Sound")
+    snowSound.Name="RM5_SnowSteps"
+    snowSound.Volume=.18
+    snowSound.Parent=ctx.Folder
+    ctx.Track(snowSound)
     local cellSize=3.1
     local function rand(a,b)return rng:NextNumber(a,b)end
     local function key(v)
@@ -115,7 +120,27 @@ return function(ctx)
             end
             return
         end
-        t+=dt;probeAccum+=dt;renderAccum+=dt
+        t+=dt;probeAccum+=dt;renderAccum+=dt;footAccum+=dt
+        if footAccum>.52 and ctx.Base.weatherMode=="SNOW" then
+            footAccum=0
+            local char=ctx.Players.LocalPlayer.Character
+            local hum=char and char:FindFirstChildOfClass("Humanoid")
+            local root=char and char:FindFirstChild("HumanoidRootPart")
+            local sid=ctx.Options.SnowSoundId
+            if root and hum and hum.MoveDirection.Magnitude>.15 and sid then
+                for _,c in ipairs(pool) do
+                    if c.used and c.mass>.14 and math.abs(root.Position.Y-c.pos.Y)<7
+                        and (Vector3.new(root.Position.X,0,root.Position.Z)
+                            - Vector3.new(c.pos.X,0,c.pos.Z)).Magnitude<2.2 then
+                        snowSound.SoundId="rbxassetid://"..sid
+                        snowSound.PlaybackSpeed=rand(.94,1.06)
+                        snowSound.Volume=math.clamp(c.mass*.3,.06,.20)
+                        pcall(function() snowSound:Play() end)
+                        break
+                    end
+                end
+            end
+        end
         if probeAccum>.16 then
             probeAccum-=.16
             if ctx.Base.weatherMode~="OFF" then collect() end

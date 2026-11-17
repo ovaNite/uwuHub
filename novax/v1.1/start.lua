@@ -4,7 +4,7 @@
 -- 90Hz weather, compatibility checker and integrated Weather/Diagnostics tabs.
 local REV="2df577a270a78151c9afa2f7b7b9340e45a38f4d"
 local VISUAL_REV="47a44eee561bdc9d9cb52f04712d914d91bab74b"
-local DIAG_REV="b0f43810486b109211c0d4c6a2c0d3f5558210cf"
+local DIAG_REV="d3457abb8248cea77fdea3d5ec7aa07169e5e7c3"
 local CORE_REV="c3a3edf7551ce39083a54aa7956c22f5cabf6b3e"
 local BASE="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/novax/v1/"
 local env=(getgenv and getgenv()) or _G

@@ -138,7 +138,8 @@ return function(ctx)
     for i,data in ipairs({
         {"Fire","Fire lighting and particles"},
         {"Foliage","Foliage movement"},
-        {"Scope","Scope depth-of-field"}
+        {"Scope","Scope depth-of-field"},
+        {"Optics","Weather optics and sunlight"}
     }) do
         local key,caption=data[1],data[2]
         flagButtons[key]=button(visual,key,caption,0,35+(i-1)*52,406,42,function()

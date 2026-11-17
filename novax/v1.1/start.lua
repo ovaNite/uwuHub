@@ -3,7 +3,7 @@
 -- Loads original 7466-line template as UI + main core, plus optional
 -- 90Hz weather, compatibility checker and integrated Weather/Diagnostics tabs.
 local REV="2df577a270a78151c9afa2f7b7b9340e45a38f4d"
-local VISUAL_REV="47a44eee561bdc9d9cb52f04712d914d91bab74b"
+local VISUAL_REV="a4993fedeb256f7f1c1919a5a64806b6d05a3bea"
 local DIAG_REV="650f186a50d8b44420c946ca9d8ff39e008bd6f3"
 local CORE_REV="7d1f117e9d25d7cbb47f17ebdd59f007ecc34605"
 local BASE="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/novax/v1/"
@@ -132,7 +132,7 @@ local okControls,controlsError=pcall(function()
   local run=game:GetService("RunService")
   local workspace=game:GetService("Workspace")
   local fast,muted,rate,volume=false,false,10,100
-  local includeShared=false
+  local includeShared=true
   local held,active,nextShot=false,true,0
   local saved=setmetatable({}, {__mode="k"})
   local watched=setmetatable({}, {__mode="k"})
@@ -284,7 +284,7 @@ local okControls,controlsError=pcall(function()
   tab:CreateSection("Local shot sounds")
   tab:CreateLabel("Uses shooting sound IDs when available and common local sound names.")
   tab:CreateToggle({Name="No Shoot Sound",CurrentValue=false,Callback=function(v) muted=v;applySounds() end})
-  tab:CreateToggle({Name="Include shared shot sounds (may mute other effects)",CurrentValue=false,
+  tab:CreateToggle({Name="Include shared shot sounds (may mute other effects)",CurrentValue=true,
     Callback=function(v) includeShared=v;applySounds() end})
   tab:CreateSlider({Name="Shot volume (%)",Range={0,100},Increment=5,CurrentValue=100,
     Callback=function(v) volume=math.clamp(tonumber(v) or 100,0,100);applySounds() end})
@@ -295,164 +295,210 @@ if not okControls then
   table.insert(env.NovaXRelease.Errors,"Weapon Controls: "..tostring(controlsError))
   warn("[NovaX] Weapon Controls: "..tostring(controlsError))
 end
--- Local view-model appearance selector; does not alter weapon behaviour.
+-- Local weapon skins: read the client's cosmetic catalogue and model assets.
 local modelControls
 local okModels,modelError=pcall(function()
   local ui=assert(env.NX_UI_WINDOW,"NovaX GUI not available")
-  local player=game:GetService("Players").LocalPlayer
+  local players=game:GetService("Players")
+  local player=players.LocalPlayer
   local run=game:GetService("RunService")
-  local store=game:GetService("ReplicatedStorage")
   local world=game:GetService("Workspace")
-  local cache,originals,links={},{},{}
-  local animationLinks={}
-  local adjustments={x=0,y=0,z=0,rx=0,ry=0,rz=0}
-  local active,selected,shown,shownRig=true,"Original",nil,nil
-  local options,dropdown={"Original"},nil
+  local storage=game:GetService("ReplicatedStorage")
+  local links,originals,motion={}, {}, {}
+  local active,shown,shownRig,shownSkin=true,nil,nil,nil
+  local retryAt=0
+  local chosen,adjustments={}, {x=0,y=0,z=0,rx=0,ry=0,rz=0}
+  local configState=type(env.NX_STATE)=="table" and env.NX_STATE or nil
+  local http=game:GetService("HttpService")
+  local encoded="{}"
+  if configState then
+    if type(configState.NovaXSkinSelections)~="string" then configState.NovaXSkinSelections="{}" end
+    encoded=configState.NovaXSkinSelections
+    local ok,data=pcall(function() return http:JSONDecode(encoded) end)
+    if ok and type(data)=="table" then chosen=data end
+  end
+  local catalog,assetsByName,weapons={}, {}, {}
+  local selectedWeapon,skinDropdown,weaponDropdown="",nil,nil
+  local labels={}
   local function clear()
     if shown then shown:Destroy();shown=nil end
-    for part,old in pairs(originals) do pcall(function() part.LocalTransparencyModifier=old end) end
-    originals={};animationLinks={};shownRig=nil
+    for part,value in pairs(originals) do pcall(function() part.LocalTransparencyModifier=value end) end
+    originals={};motion={};shownRig=nil;shownSkin=nil
   end
-  local function root()
+  local function loadCatalog()
+    local scripts=player:FindFirstChild("PlayerScripts")
+    local assets=scripts and scripts:FindFirstChild("Assets")
+    local models=assets and assets:FindFirstChild("ViewModels")
+    local modules=storage:FindFirstChild("Modules")
+    local library=modules and modules:FindFirstChild("CosmeticLibrary")
+    if not models or not library or type(getloadedmodules)~="function" then return false end
+    local ready=false
+    local ok,loaded=pcall(getloadedmodules)
+    if ok and type(loaded)=="table" then for _,v in ipairs(loaded) do if v==library then ready=true;break end end end
+    if not ready then return false end
+    local success,lib=pcall(require,library)
+    local all=success and type(lib)=="table" and rawget(lib,"Cosmetics")
+    if type(all)~="table" then return false end
+    local indexed={}
+    for _,folder in ipairs(models:GetChildren()) do
+      for _,model in ipairs(folder:GetChildren()) do
+        if model:IsA("Model") and not indexed[model.Name] then indexed[model.Name]=model end
+      end
+    end
+    local nextCatalog,nextWeapons={},{}
+    for name,entry in pairs(all) do
+      if type(name)=="string" and type(entry)=="table" and rawget(entry,"Type")=="Skin" then
+        local weapon=rawget(entry,"ItemName");local asset=indexed[name]
+        if type(weapon)=="string" and asset then
+          if not nextCatalog[weapon] then nextCatalog[weapon]={};nextWeapons[#nextWeapons+1]=weapon end
+          local rarity=tostring(rawget(entry,"Rarity") or "Unknown")
+          nextCatalog[weapon][#nextCatalog[weapon]+1]={name=name,rarity=rarity,model=asset}
+        end
+      end
+    end
+    table.sort(nextWeapons)
+    for _,entries in pairs(nextCatalog) do table.sort(entries,function(a,b) return a.name<b.name end) end
+    catalog,assetsByName,weapons=nextCatalog,indexed,nextWeapons
+    return #weapons>0
+  end
+  local function activeRig()
     local view=world:FindFirstChild("ViewModels")
-    return view and view:FindFirstChild("FirstPerson")
-  end
-  local function rig()
-    local r=root();if not r then return nil end
+    local first=view and view:FindFirstChild("FirstPerson")
+    if not first then return nil end
     local prefix=player.Name.." - "
-    for _,v in ipairs(r:GetChildren()) do
-      if v:IsA("Model") and v.Name:sub(1,#prefix)==prefix and v:FindFirstChild("ItemVisual") then return v end
+    for _,v in ipairs(first:GetChildren()) do
+      if v:IsA("Model") and v.Name:sub(1,#prefix)==prefix and v:FindFirstChild("ItemVisual") then
+        local suffix=v.Name:sub(#prefix+1)
+        return v,suffix:match("^(.-) %- ") or suffix
+      end
     end
     return nil
   end
-  local function add(model)
-    if not model:IsA("Model") then return end
-    local prefix=player.Name.." - "
-    if model.Name:sub(1,#prefix)~=prefix then return end
-    local name=model.Name:sub(#prefix+1)
-    if cache[name] or #options>=129 then return end
-    local visual=model:FindFirstChild("ItemVisual")
-    local grip=model:FindFirstChild("RightItem")
-    if not visual or not visual:IsA("Model") or not grip or not grip:IsA("BasePart") then return end
-    if not visual:FindFirstChildWhichIsA("BasePart",true) then return end
-    local ok,copy,offset=pcall(function() return visual:Clone(),grip.CFrame:ToObjectSpace(visual:GetPivot()) end)
-    if not ok or not copy then return end
-    for _,v in ipairs(copy:GetDescendants()) do
-      if v:IsA("LuaSourceContainer") or v:IsA("Sound") or v:IsA("JointInstance") or v:IsA("Constraint") then
-        v:Destroy()
-      elseif v:IsA("BasePart") then
-        v.Anchored=true;v.CanCollide=false;v.CanTouch=false;v.CanQuery=false
-      end
-    end
-    cache[name]={visual=copy,offset=offset}
-    options[#options+1]=name
-    if dropdown and dropdown.Refresh then dropdown:Refresh(options) end
-  end
-  local function scan()
-    local activeRoot=root()
-    local assets=store:FindFirstChild("Assets")
-    local temp=assets and assets:FindFirstChild("Temp")
-    local parked=temp and temp:FindFirstChild("ViewModels")
-    for _,container in pairs({activeRoot,parked}) do
-      if container then for _,model in ipairs(container:GetChildren()) do add(model) end end
-    end
+  local function anchor(model,group)
+    local candidate=group and model:FindFirstChild(group)
+    local primary=candidate and (candidate:FindFirstChild(tostring(group).."Primary",true) or candidate:FindFirstChild("Primary",true))
+    if primary and primary:IsA("BasePart") then return primary end
+    local body=model:FindFirstChild("Body")
+    primary=body and (body:FindFirstChild("BodyPrimary",true) or body:FindFirstChild("Primary",true))
+    if primary and primary:IsA("BasePart") then return primary end
+    return model:FindFirstChildWhichIsA("BasePart",true)
   end
   local function adjustment()
     return CFrame.new(adjustments.x,adjustments.y,adjustments.z)
       *CFrame.Angles(math.rad(adjustments.rx),math.rad(adjustments.ry),math.rad(adjustments.rz))
   end
-  local function partPath(part,base)
-    local names={}
-    while part and part~=base do table.insert(names,1,part.Name);part=part.Parent end
-    if part~=base then return nil end
-    return table.concat(names,"/")
-  end
-  local function show(target)
+  local function show(rig,weapon,skin)
     clear()
-    local source=cache[selected]
-    if not source or not target then return end
-    local prefix=player.Name.." - "
-    if target.Name:sub(#prefix+1)==selected then shownRig=target;return end
-    local visual=target:FindFirstChild("ItemVisual")
-    local grip=target:FindFirstChild("RightItem")
-    if not visual or not grip or not grip:IsA("BasePart") then return end
-    local clone=source.visual:Clone()
-    if not clone then return end
-    clone.Name="NovaX_LocalModel"
-    clone.Parent=world.CurrentCamera or world
-    clone:PivotTo(grip.CFrame*source.offset*adjustment())
-    local targets={}
-    for _,part in ipairs(visual:GetDescendants()) do
-      if part:IsA("BasePart") then
-        local path=partPath(part,visual)
-        if path then if targets[path]~=nil then targets[path]=false else targets[path]=part end end
-        originals[part]=part.LocalTransparencyModifier;part.LocalTransparencyModifier=1
-      end
+    local asset=assetsByName[skin]
+    local visual=rig and rig:FindFirstChild("ItemVisual")
+    if not asset or not visual then return end
+    local ok,clone=pcall(function() return asset:Clone() end)
+    if not ok or not clone then return end
+    clone.Name="NovaX_LocalSkin"
+    for _,obj in ipairs(clone:GetDescendants()) do
+      if obj:IsA("LuaSourceContainer") or obj:IsA("Sound") or obj:IsA("JointInstance") or obj:IsA("Constraint") then
+        obj:Destroy()
+      elseif obj:IsA("BasePart") then obj.Anchored=true;obj.CanCollide=false;obj.CanTouch=false;obj.CanQuery=false end
     end
-    local sources={}
     for _,part in ipairs(clone:GetDescendants()) do
       if part:IsA("BasePart") then
-        local path=partPath(part,clone)
-        if path then if sources[path]~=nil then sources[path]=false else sources[path]=part end end
+        local group=part
+        while group.Parent and group.Parent~=clone do group=group.Parent end
+        local name=group.Parent==clone and group.Name or nil
+        local from=anchor(clone,name);local to=anchor(visual,name)
+        if from and to then motion[#motion+1]={part=part,target=to,offset=from.CFrame:ToObjectSpace(part.CFrame)} end
       end
     end
-    for path,part in pairs(sources) do
-      local match=targets[path]
-      if part and match then animationLinks[#animationLinks+1]={part=part,target=match,offset=match.CFrame:ToObjectSpace(part.CFrame)} end
+    if #motion==0 then clone:Destroy();return end
+    clone.Parent=world.CurrentCamera or world
+    for _,part in ipairs(visual:GetDescendants()) do
+      if part:IsA("BasePart") then originals[part]=part.LocalTransparencyModifier;part.LocalTransparencyModifier=1 end
     end
-    shown=clone;shownRig=target
+    shown=clone;shownRig=rig;shownSkin=skin
   end
-  local tab=ui:CreateTab("Weapon Models",4483345998)
-  tab:CreateSection("Local appearance")
-  tab:CreateLabel("Equip variants to add them. Appearance is visible only to you.")
-  dropdown=tab:CreateDropdown({Name="Model",Options=options,CurrentOption={"Original"},Callback=function(v)
-    selected=type(v)=="table" and tostring(v[1]) or tostring(v)
-    clear()
+  local tab=ui:CreateTab("Skin Changer",4483345998)
+  tab:CreateSection("Local weapon skins")
+  tab:CreateLabel("Choose a weapon and a skin. Only your view changes; ownership is unchanged.")
+  loadCatalog()
+  local available={};for _,name in ipairs(weapons) do available[#available+1]=name end
+  if #available==0 then available={"Catalogue unavailable"} end
+  local function refreshSkins()
+    labels={};local opts={"Original"};local current="Original"
+    for _,entry in ipairs(catalog[selectedWeapon] or {}) do
+      local label="["..entry.rarity.."] "..entry.name
+      labels[label]=entry.name;opts[#opts+1]=label
+      if chosen[selectedWeapon]==entry.name then current=label end
+    end
+    if skinDropdown then skinDropdown:Refresh(opts);skinDropdown:Set(current) end
+  end
+  weaponDropdown=tab:CreateDropdown({Name="Weapon",Options=available,CurrentOption={available[1]},Callback=function(v)
+    selectedWeapon=type(v)=="table" and tostring(v[1]) or tostring(v);refreshSkins()
   end})
-  tab:CreateButton({Name="Refresh loaded models",Callback=scan})
+  selectedWeapon=available[1]
+  skinDropdown=tab:CreateDropdown({Name="Skin",Options={"Original"},CurrentOption={"Original"},Callback=function(v)
+    local label=type(v)=="table" and tostring(v[1]) or tostring(v)
+    chosen[selectedWeapon]=labels[label]
+    if configState then
+      local ok,data=pcall(function() return http:JSONEncode(chosen) end)
+      if ok then encoded=data;configState.NovaXSkinSelections=data end
+    end
+    clear();retryAt=0
+  end})
+  refreshSkins()
+  tab:CreateButton({Name="Refresh skin catalogue",Callback=function()
+    if not loadCatalog() then
+      if ui.Notify then ui:Notify({Title="Skin Changer",Content="Catalogue not ready yet.",Duration=4}) end
+      return
+    end
+    local exists=catalog[selectedWeapon]~=nil
+    if not exists then selectedWeapon=weapons[1] end
+    if weaponDropdown and weaponDropdown.Refresh then weaponDropdown:Refresh(weapons);weaponDropdown:Set(selectedWeapon) end
+    refreshSkins()
+  end})
   tab:CreateSection("Alignment")
-  tab:CreateLabel("Matching parts follow the equipped model; other parts follow the hand.")
+  tab:CreateLabel("Offsets apply locally; matching moving sections follow the weapon.")
   for _,item in ipairs({{"Offset X","x",-2,2,0.05},{"Offset Y","y",-2,2,0.05},
     {"Offset Z","z",-2,2,0.05},{"Rotation X","rx",-180,180,5},
     {"Rotation Y","ry",-180,180,5},{"Rotation Z","rz",-180,180,5}}) do
     local key=item[2]
     tab:CreateSlider({Name=item[1],Range={item[3],item[4]},Increment=item[5],CurrentValue=0,
-      Callback=function(value) adjustments[key]=tonumber(value) or 0;clear() end})
+      Callback=function(value) adjustments[key]=tonumber(value) or 0 end})
   end
   modelControls={Stop=function()
-    active=false
-    for _,c in ipairs(links) do c:Disconnect() end
-    clear()
-    for _,entry in pairs(cache) do entry.visual:Destroy() end
-    cache={}
+    active=false;for _,c in ipairs(links) do c:Disconnect() end;clear()
   end}
-  local lastScan=0
+  local configCheckAt=0
   links[#links+1]=run.RenderStepped:Connect(function()
     if not active then return end
     local now=os.clock()
-    if now-lastScan>=1 then lastScan=now;scan() end
-    local target=rig()
-    if selected=="Original" then if shown then clear() end;return end
-    if target~=shownRig then show(target) end
-    if shown and target then
-      local grip=target:FindFirstChild("RightItem")
-      local source=cache[selected]
-      if grip and source then
-        pcall(function()
-          shown:PivotTo(grip.CFrame*source.offset*adjustment())
-          for _,link in ipairs(animationLinks) do
-            if link.part.Parent and link.target.Parent then link.part.CFrame=link.target.CFrame*link.offset end
-          end
-        end)
-      else clear() end
+    if configState and now>=configCheckAt then
+      configCheckAt=now+0.5
+      local incoming=configState.NovaXSkinSelections
+      if type(incoming)=="string" and incoming~=encoded then
+        local ok,data=pcall(function() return http:JSONDecode(incoming) end)
+        if ok and type(data)=="table" then
+          chosen=data;encoded=incoming;clear();retryAt=0;refreshSkins()
+        end
+      end
+    end
+    local target,weapon=activeRig();local skin=weapon and chosen[weapon]
+    if not skin then if shown then clear() end;return end
+    if (target~=shownRig or skin~=shownSkin) and os.clock()>=retryAt then
+      retryAt=os.clock()+1;show(target,weapon,skin)
+      if shown then retryAt=0 end
+    end
+    if shown then
+      local offset=adjustment()
+      pcall(function() for _,link in ipairs(motion) do
+        if link.part.Parent and link.target.Parent then link.part.CFrame=link.target.CFrame*offset*link.offset end
+      end end)
     end
   end)
-  scan()
 end)
 if not okModels then
   if modelControls then pcall(modelControls.Stop);modelControls=nil end
-  table.insert(env.NovaXRelease.Errors,"Weapon Models: "..tostring(modelError))
-  warn("[NovaX] Weapon Models: "..tostring(modelError))
+  table.insert(env.NovaXRelease.Errors,"Skin Changer: "..tostring(modelError))
+  warn("[NovaX] Skin Changer: "..tostring(modelError))
 end
 env.NX_CLEANUP=function()
   if modelControls then pcall(modelControls.Stop) end

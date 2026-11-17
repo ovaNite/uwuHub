@@ -136,7 +136,7 @@ return function(ctx)
     end
     -- 6 crystal arms = three crossed tiny bars, not spheres or large squares.
     for i=1,cfg.Near do
-        local d={active=false,pos=Vector3.zero,vel=Vector3.zero,age=0,
+        local d={active=false,pos=Vector3.zero,lastChecked=Vector3.zero,vel=Vector3.zero,age=0,
             spin=0,phase=0,size=.08,opacity=.2,step=0,
             target=Vector3.zero,windNoise=0,parts={}}
         for k=1,3 do
@@ -282,6 +282,7 @@ return function(ctx)
         local drift=Vector3.new(wind.X,0,wind.Z)*.12
         d.pos=target.Position+Vector3.new(rnd(-.6,.6),height,rnd(-.6,.6))
             -drift*(height/5)
+        d.lastChecked=d.pos
         d.vel=Vector3.new(drift.X+rnd(-.7,.7),-rnd(2.2,4.5),
             drift.Z+rnd(-.7,.7))
     end
@@ -310,7 +311,8 @@ return function(ctx)
         local close=(nextPos-d.target).Magnitude<1.8
         if d.step>.080 or close then
             d.step=0
-            local hit=ray(prior,nextPos-prior)
+            local hit=ray(d.lastChecked,nextPos-d.lastChecked)
+            d.lastChecked=nextPos
             if hit then
                 if hit.Normal.Y>.5 then landing(hit.Position,hit.Normal) end
                 conceal(d);return
@@ -361,7 +363,7 @@ return function(ctx)
                 +Vector3.new(0,18+i*5,0))
             field.emitter.Enabled=outside and mode=="SNOW"
             field.emitter.Rate=outside and
-                (strength*(i==1 and 31 or i==2 and 55 or 95))
+                (strength*(i==1 and 31 or i==2 and 55 or 95))*(cfg.Quality/2)
                 or 0
             field.emitter.Acceleration=Vector3.new(0,-3.5,0)
         end
@@ -405,8 +407,9 @@ return function(ctx)
         local spawnBudget=math.min(3,floor(spawnAccumulator))
         spawnAccumulator-=spawnBudget
         for _=1,spawnBudget do
-            for _,d in ipairs(near) do
-                if not d.active then
+            for idx,d in ipairs(near) do
+                if idx<=(cfg.Quality==1 and 28 or cfg.Quality==2 and 48 or 66)
+                    and not d.active then
                     spawn(d,cam)
                     break
                 end
@@ -446,6 +449,24 @@ return function(ctx)
             ctx.Stats.SnowRoofRejected=roofRejects
             ctx.Stats.SnowSimulationHz=snowSimSteps/(os.clock()-lastStats)
             snowSimSteps=0;lastStats=os.clock()
+        end
+    end)
+    ctx.Snow={
+        SetQuality=function(value)
+            cfg.Quality=math.clamp(math.floor(tonumber(value) or 2),1,3)
+            ctx.Stats.SnowQuality=cfg.Quality
+        end,
+        CycleQuality=function()
+            cfg.Quality=(cfg.Quality%3)+1
+            ctx.Stats.SnowQuality=cfg.Quality
+            return ({"ECO","BALANCED","ULTRA"})[cfg.Quality]
+        end,
+        GetQuality=function() return cfg.Quality end
+    }
+    ctx.Stats.SnowQuality=cfg.Quality
+    ctx.Link(ctx.UserInputService.InputBegan,function(input,processed)
+        if not processed and input.KeyCode==Enum.KeyCode.F5 then
+            print("[RM9] Snow detail: "..ctx.Snow.CycleQuality())
         end
     end)
     ctx.AddStop(function()

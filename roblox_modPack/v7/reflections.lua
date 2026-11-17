@@ -266,7 +266,10 @@ return function(ctx)
         local viewport=cam.ViewportSize
         if viewport.X<200 or viewport.Y<150 then return end
         local character=LocalPlayer.Character
-        param.FilterDescendantsInstances={ctx.Folder,character,cam}
+        -- Do not pass a nil hole when the avatar is respawning.
+        local excludes={ctx.Folder,cam}
+        if character then excludes[#excludes+1]=character end
+        param.FilterDescendantsInstances=excludes
         local quality=levels[setting]
         local cells=quality.columns*quality.rows
         -- Sample at most this many rays per render frame. This is not 90Hz

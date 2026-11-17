@@ -5,7 +5,7 @@
 local REV="2df577a270a78151c9afa2f7b7b9340e45a38f4d"
 local VISUAL_REV="47a44eee561bdc9d9cb52f04712d914d91bab74b"
 local DIAG_REV="d3457abb8248cea77fdea3d5ec7aa07169e5e7c3"
-local CORE_REV="c3a3edf7551ce39083a54aa7956c22f5cabf6b3e"
+local CORE_REV="7d1f117e9d25d7cbb47f17ebdd59f007ecc34605"
 local BASE="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/novax/v1/"
 local env=(getgenv and getgenv()) or _G
 if type(loadstring)~="function" then

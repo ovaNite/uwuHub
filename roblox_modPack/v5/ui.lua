@@ -1,246 +1,407 @@
--- roblox_modPack v5 / ui.lua
--- User-customizable dark Roblox UI. Roblox asset IDs only (no arbitrary local GIF).
+-- roblox_modPack / modern_ui.lua
+-- Black custom window, movable, animated, 1..100% rain/snow, theme gallery,
+-- local music player and remappable keys. No Roblox default widgets.
 return function(ctx)
     local player=ctx.Players.LocalPlayer
-    local playerGui=player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui",10)
-    if not playerGui then return end
+    local playerGui=player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui",12)
+    if not playerGui then return {Name="UI unavailable"} end
     local legacy=playerGui:FindFirstChild("RM4_LocalGraphicsDiagnostics")
     if legacy then legacy.Enabled=false end
     local U=ctx.UserInputService
-    local gui=Instance.new("ScreenGui")
-    gui.Name="RM5_RealismControl"
-    gui.ResetOnSpawn=false;gui.DisplayOrder=40;gui.IgnoreGuiInset=false
-    gui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
-    gui.Parent=playerGui;ctx.Track(gui)
-    local theme={radius=11,opacity=.07,accent=Color3.fromRGB(189,198,207)}
-    local corners,accents={},{}
-    local function obj(class,props,parent)
+    local TweenService=game:GetService("TweenService")
+    local Run=ctx.RunService
+    local screen=Instance.new("ScreenGui")
+    screen.Name="roblox_modPack_CUSTOM_UI"
+    screen.ResetOnSpawn=false;screen.IgnoreGuiInset=false
+    screen.DisplayOrder=300;screen.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+    screen.Parent=playerGui
+    ctx.Track(screen)
+    local accent=Color3.fromRGB(196,208,216)
+    local theme={radius=14,windowOpacity=.06,accent=accent,key=Enum.KeyCode.F10}
+    local roundList={},{}
+    local rounds=roundList[1]
+    local function new(class,props,parent)
         local o=Instance.new(class)
-        for k,v in pairs(props or {}) do o[k]=v end
+        for key,value in pairs(props or {}) do o[key]=value end
         o.Parent=parent
         return o
     end
-    local function round(target)
-        local c=obj("UICorner",{CornerRadius=UDim.new(0,theme.radius)},target)
-        corners[#corners+1]=c
+    local function corner(obj,rad)
+        local c=new("UICorner",{CornerRadius=UDim.new(0,rad or theme.radius)},obj)
+        table.insert(rounds,c)
         return c
     end
-    local panel=obj("Frame",{
-        Name="Panel",Size=UDim2.fromOffset(430,490),
-        Position=UDim2.new(.5,-215,.5,-245),
-        BackgroundColor3=Color3.fromRGB(15,17,19),
-        BackgroundTransparency=theme.opacity,BorderSizePixel=0,
-        ClipsDescendants=true
-    },gui)
-    round(panel)
-    local bg=obj("ImageLabel",{
-        Name="Background",Size=UDim2.fromScale(1,1),
-        BackgroundTransparency=1,ImageTransparency=.70,
-        ScaleType=Enum.ScaleType.Crop,Image="",ZIndex=1
-    },panel)
-    local shade=obj("Frame",{
-        Size=UDim2.fromScale(1,1),BackgroundColor3=Color3.fromRGB(11,13,15),
-        BackgroundTransparency=.25,BorderSizePixel=0,ZIndex=2
-    },panel)
-    local heading=obj("TextButton",{
-        Name="Drag",Text="  REALISM  /  ENVIRONMENT",Size=UDim2.new(1,-45,0,48),
-        Font=Enum.Font.GothamBold,TextSize=15,TextColor3=Color3.fromRGB(239,241,242),
-        TextXAlignment=Enum.TextXAlignment.Left,BackgroundTransparency=1,
-        ZIndex=3
-    },panel)
-    local close=obj("TextButton",{
-        Text="–",Size=UDim2.fromOffset(37,37),Position=UDim2.new(1,-44,0,5),
-        BackgroundColor3=Color3.fromRGB(35,38,40),
-        TextColor3=Color3.fromRGB(236,237,238),Font=Enum.Font.GothamBold,
-        TextSize=22,ZIndex=4,BorderSizePixel=0
-    },panel);round(close)
-    local open=obj("TextButton",{
-        Name="Open",Text="◈",Size=UDim2.fromOffset(40,40),
-        Position=UDim2.new(1,-52,0,16),
-        BackgroundColor3=Color3.fromRGB(21,23,25),BorderSizePixel=0,
-        TextColor3=theme.accent,Font=Enum.Font.GothamBold,TextSize=19,Visible=false
-    },gui);round(open);accents[#accents+1]=open
-
-    local pages={}
-    local tabs=obj("Frame",{
-        Size=UDim2.new(1,-24,0,39),Position=UDim2.fromOffset(12,53),
-        BackgroundTransparency=1,ZIndex=3
-    },panel)
-    local tabNames={"WEATHER","VISUALS","STYLE"}
-    local activePage="WEATHER"
-    local function activate(name)
-        activePage=name
-        for page,p in pairs(pages) do p.Visible=page==name end
+    local function stroke(obj,width,trans)
+        return new("UIStroke",{
+            Color=Color3.fromRGB(94,105,116),Thickness=width or 1,
+            Transparency=trans or .76
+        },obj)
     end
-    for i,name in ipairs(tabNames) do
-        local b=obj("TextButton",{
-            Name=name,Size=UDim2.new(1/3,-6,1,0),Position=UDim2.new((i-1)/3,3,0,0),
-            Text=name,Font=Enum.Font.GothamSemibold,TextSize=12,
-            TextColor3=Color3.fromRGB(223,226,229),
-            BackgroundColor3=Color3.fromRGB(34,36,38),BorderSizePixel=0,ZIndex=3
-        },tabs);round(b)
-        ctx.Link(b.MouseButton1Click,function() activate(name) end)
-        pages[name]=obj("Frame",{
-            Size=UDim2.new(1,-24,1,-160),Position=UDim2.fromOffset(12,102),
-            BackgroundTransparency=1,Visible=i==1,ZIndex=3
-        },panel)
-    end
-    local function label(where,text,y,size)
-        return obj("TextLabel",{
-            Size=UDim2.new(1,0,0,size or 26),Position=UDim2.fromOffset(0,y),
-            BackgroundTransparency=1,Text=text,TextWrapped=true,
-            TextXAlignment=Enum.TextXAlignment.Left,TextYAlignment=Enum.TextYAlignment.Center,
-            Font=Enum.Font.Gotham,TextColor3=Color3.fromRGB(195,201,204),
-            TextSize=12,ZIndex=3
-        },where)
-    end
-    local function button(where,name,text,x,y,w,h,fn)
-        local b=obj("TextButton",{
-            Name=name,Text=text,Position=UDim2.fromOffset(x,y),
-            Size=UDim2.fromOffset(w,h),BorderSizePixel=0,ZIndex=3,
-            BackgroundColor3=Color3.fromRGB(39,42,45),
-            TextColor3=Color3.fromRGB(238,239,240),Font=Enum.Font.GothamSemibold,
-            TextSize=12
-        },where);round(b)
-        ctx.Link(b.MouseButton1Click,function()
-            local ok,err=pcall(fn)
-            if not ok then warn("[RM5 UI] "..tostring(err)) end
+    local function animate(obj,dest,time)
+        pcall(function()
+            TweenService:Create(obj,TweenInfo.new(time or .19,Enum.EasingStyle.Quint,
+                Enum.EasingDirection.Out),dest):Play()
         end)
+    end
+    local gui=new("Frame",{
+        Name="Main",Size=UDim2.fromOffset(654,503),Position=UDim2.new(.5,-327,.5,-251),
+        BackgroundColor3=Color3.fromRGB(13,15,17),
+        BackgroundTransparency=theme.windowOpacity,BorderSizePixel=0,
+        ClipsDescendants=true,Visible=true
+    },screen)
+    corner(gui);stroke(gui,1,.61)
+    local scaler=new("UIScale",{Scale=.92},gui)
+    animate(scaler,{Scale=1},.30)
+    local background=new("ImageLabel",{
+        Name="CustomBackground",BackgroundTransparency=1,
+        Size=UDim2.fromScale(1,1),Image="",
+        ScaleType=Enum.ScaleType.Crop,ImageTransparency=.75,ZIndex=1
+    },gui)
+    local overlay=new("Frame",{
+        Size=UDim2.fromScale(1,1),
+        BackgroundColor3=Color3.fromRGB(10,12,14),
+        BackgroundTransparency=.18,BorderSizePixel=0,ZIndex=2
+    },gui)
+    local top=new("Frame",{
+        Size=UDim2.new(1,0,0,59),BackgroundTransparency=1,ZIndex=3
+    },gui)
+    local title=new("TextLabel",{
+        Text="REALISM",Font=Enum.Font.GothamBold,TextSize=19,
+        TextColor3=Color3.fromRGB(235,237,239),BackgroundTransparency=1,
+        TextXAlignment=Enum.TextXAlignment.Left,Position=UDim2.fromOffset(23,6),
+        Size=UDim2.fromOffset(240,45),ZIndex=4
+    },top)
+    local sub=new("TextLabel",{
+        Text="LOCAL ENVIRONMENT  /  V5.2",Font=Enum.Font.GothamMedium,TextSize=10,
+        TextColor3=Color3.fromRGB(121,137,148),BackgroundTransparency=1,
+        TextXAlignment=Enum.TextXAlignment.Right,Position=UDim2.new(1,-295,0,13),
+        Size=UDim2.fromOffset(218,30),ZIndex=4
+    },top)
+    local function textLabel(parent,label,pos,size,sz,color,font)
+        return new("TextLabel",{
+            Text=label or "",Position=pos or UDim2.fromOffset(0,0),
+            Size=size or UDim2.fromOffset(100,30),BackgroundTransparency=1,
+            TextXAlignment=Enum.TextXAlignment.Left,TextYAlignment=Enum.TextYAlignment.Center,
+            TextWrapped=false,Font=font or Enum.Font.Gotham,
+            TextSize=sz or 13,TextColor3=color or Color3.fromRGB(210,216,220),ZIndex=6
+        },parent)
+    end
+    local function button(parent,titleText,pos,size,click,selected)
+        local b=new("TextButton",{
+            Text=titleText,Position=pos,Size=size,
+            BackgroundColor3=selected and Color3.fromRGB(48,58,64) or Color3.fromRGB(31,35,39),
+            TextColor3=Color3.fromRGB(220,227,232),Font=Enum.Font.GothamMedium,
+            TextSize=12,AutoButtonColor=false,BorderSizePixel=0,ZIndex=6
+        },parent)
+        corner(b,8);stroke(b,1,.89)
+        ctx.Link(b.MouseEnter,function()
+            animate(b,{BackgroundColor3=Color3.fromRGB(55,62,68)},.12)
+        end)
+        ctx.Link(b.MouseLeave,function()
+            animate(b,{BackgroundColor3=selected and Color3.fromRGB(48,58,64)
+                or Color3.fromRGB(31,35,39)},.16)
+        end)
+        if click then ctx.Link(b.MouseButton1Click,click) end
         return b
     end
-    local weather=pages.WEATHER
-    label(weather,"NEEDLE-THIN RAIN / WIND-DRIVEN SNOW",0,28)
-    button(weather,"Rain","RAIN",0,36,126,40,function() ctx.Base.SetWeatherMode("RAIN") end)
-    button(weather,"Snow","SNOW",140,36,126,40,function() ctx.Base.SetWeatherMode("SNOW") end)
-    button(weather,"Clear","CLEAR",280,36,126,40,function() ctx.Base.SetWeatherMode("OFF") end)
-    button(weather,"Intensity","INTENSITY  ↻",0,92,198,36,function() ctx.Base.CycleWeatherIntensity() end)
-    button(weather,"Power","SIMULATION  ON/OFF",209,92,197,36,function()
-        ctx.Base.SetEnabled(not ctx.Base.enabled)
-    end)
-    label(weather,"Physics target: 90 fixed steps / second",143)
-    local telemetry=label(weather,"Waiting for client physics...",175,95)
-    telemetry.TextYAlignment=Enum.TextYAlignment.Top
-    label(weather,"OPTIONAL SNOW STEP SOUND (ROBLOX AUDIO ID)",267,22)
-    local snowSoundInput=obj("TextBox",{
-        Name="SnowSoundId",Text="",PlaceholderText="Approved Roblox sound asset ID",
-        ClearTextOnFocus=false,Size=UDim2.fromOffset(406,30),
-        Position=UDim2.fromOffset(0,295),ZIndex=3,
-        BackgroundColor3=Color3.fromRGB(38,41,43),BorderSizePixel=0,
-        Font=Enum.Font.Code,TextColor3=Color3.fromRGB(236,237,238),
-        PlaceholderColor3=Color3.fromRGB(124,129,132),TextSize=12
-    },weather);round(snowSoundInput)
-    ctx.Link(snowSoundInput.FocusLost,function()
-        ctx.Options.SnowSoundId=snowSoundInput.Text:match("(%d+)")
-    end)
-    local visual=pages.VISUALS
-    label(visual,"LOCAL EFFECTS / REVERSIBLE",0)
-    local flagButtons={}
-    for i,data in ipairs({
-        {"Fire","Fire lighting and particles"},
-        {"Foliage","Foliage movement"},
-        {"Scope","Scope depth-of-field"},
-        {"Optics","Weather optics and sunlight"}
-    }) do
-        local key,caption=data[1],data[2]
-        flagButtons[key]=button(visual,key,caption,0,35+(i-1)*52,406,42,function()
-            ctx.Options[key]=not ctx.Options[key]
+    local close=button(top,"—",UDim2.new(1,-51,0,10),UDim2.fromOffset(36,35),nil)
+    close.TextSize=20
+    local bubble=button(screen,"◈",UDim2.new(1,-54,0,17),UDim2.fromOffset(39,39),nil)
+    bubble.Visible=false;corner(bubble,11)
+    local function visible(state)
+        if state then
+            gui.Visible=true;bubble.Visible=false
+            scaler.Scale=.9;animate(scaler,{Scale=1},.22)
+        else
+            gui.Visible=false;bubble.Visible=true
+        end
+    end
+    ctx.Link(close.MouseButton1Click,function()visible(false)end)
+    ctx.Link(bubble.MouseButton1Click,function()visible(true)end)
+    local sidebar=new("Frame",{
+        Position=UDim2.fromOffset(12,63),Size=UDim2.fromOffset(146,424),
+        BackgroundColor3=Color3.fromRGB(19,23,26),BorderSizePixel=0,
+        BackgroundTransparency=.06,ZIndex=3
+    },gui)
+    corner(sidebar,10)
+    local pageNames={"WETTER","LOOKS","AUDIO","CUSTOM"}
+    local pages={}
+    local menuButtons={}
+    local active="WETTER"
+    for i,name in ipairs(pageNames) do
+        local b=button(sidebar,name,UDim2.fromOffset(9,14+(i-1)*55),
+            UDim2.fromOffset(128,43),nil,i==1)
+        menuButtons[name]=b
+    end
+    local status=textLabel(sidebar,"90 HZ  ·  LOCAL",UDim2.fromOffset(12,380),
+        UDim2.fromOffset(128,20),10,Color3.fromRGB(132,151,161),Enum.Font.GothamSemibold)
+    local function page(name)
+        local p=new("ScrollingFrame",{
+            Name=name,Position=UDim2.fromOffset(172,70),Size=UDim2.fromOffset(467,400),
+            BackgroundTransparency=1,BorderSizePixel=0,
+            ScrollBarThickness=3,ScrollBarImageColor3=Color3.fromRGB(93,105,111),
+            CanvasSize=UDim2.fromOffset(0,690),
+            ScrollingDirection=Enum.ScrollingDirection.Y,
+            Visible=name==active,ZIndex=4
+        },gui)
+        pages[name]=p
+        return p
+    end
+    for _,name in ipairs(pageNames) do page(name) end
+    local function switch(name)
+        active=name
+        for n,p in pairs(pages) do p.Visible=n==name end
+        for n,b in pairs(menuButtons) do
+            animate(b,{BackgroundColor3=n==name and Color3.fromRGB(50,59,65)
+                or Color3.fromRGB(31,35,39)},.20)
+        end
+    end
+    for name,b in pairs(menuButtons) do
+        ctx.Link(b.MouseButton1Click,function()switch(name)end)
+    end
+    local function caption(p,label,y)
+        return textLabel(p,label,UDim2.fromOffset(6,y),
+            UDim2.fromOffset(445,23),14,Color3.fromRGB(229,234,237),
+            Enum.Font.GothamSemibold)
+    end
+    local function field(p,placeholder,pos,size)
+        local box=new("TextBox",{
+            Text="",PlaceholderText=placeholder,ClearTextOnFocus=false,
+            Position=pos,Size=size,BackgroundColor3=Color3.fromRGB(31,35,38),
+            BorderSizePixel=0,Font=Enum.Font.Gotham,
+            TextColor3=Color3.fromRGB(229,233,235),
+            PlaceholderColor3=Color3.fromRGB(134,147,157),
+            TextSize=12,ZIndex=6
+        },p);corner(box,8);stroke(box,1,.87)
+        return box
+    end
+    local function slider(p,titleText,y,default,action)
+        local label=caption(p,titleText,y)
+        local out=textLabel(p,tostring(default).."%",UDim2.fromOffset(399,y),
+            UDim2.fromOffset(55,23),12,Color3.fromRGB(211,221,226),
+            Enum.Font.GothamSemibold)
+        out.TextXAlignment=Enum.TextXAlignment.Right
+        local track=new("Frame",{
+            Position=UDim2.fromOffset(7,y+37),Size=UDim2.fromOffset(435,7),
+            BackgroundColor3=Color3.fromRGB(58,64,69),BorderSizePixel=0,ZIndex=6
+        },p);corner(track,5)
+        local fill=new("Frame",{
+            Size=UDim2.fromScale(default/100,1),BackgroundColor3=accent,
+            BorderSizePixel=0,ZIndex=7
+        },track);corner(fill,5)
+        local knob=new("Frame",{
+            Size=UDim2.fromOffset(16,16),
+            AnchorPoint=Vector2.new(.5,.5),
+            Position=UDim2.new(default/100,0,.5,0),
+            BackgroundColor3=Color3.fromRGB(241,247,250),
+            BorderSizePixel=0,ZIndex=8
+        },track);corner(knob,8)
+        local sliding=false
+        local pct=default
+        local function update(px,committed)
+            local target=(px-track.AbsolutePosition.X)/math.max(track.AbsoluteSize.X,1)
+            pct=math.clamp(math.floor(target*99+.5)+1,1,100)
+            out.Text=tostring(pct).."%"
+            fill.Size=UDim2.fromScale(pct/100,1)
+            knob.Position=UDim2.new(pct/100,0,.5,0)
+            if committed then action(pct) end
+        end
+        ctx.Link(track.InputBegan,function(input)
+            if input.UserInputType==Enum.UserInputType.MouseButton1 or
+                input.UserInputType==Enum.UserInputType.Touch then
+                sliding=true;update(input.Position.X,false)
+            end
         end)
+        ctx.Link(U.InputChanged,function(input)
+            if sliding and (input.UserInputType==Enum.UserInputType.MouseMovement or
+                input.UserInputType==Enum.UserInputType.Touch) then
+                update(input.Position.X,false)
+            end
+        end)
+        ctx.Link(U.InputEnded,function(input)
+            if sliding and (input.UserInputType==Enum.UserInputType.MouseButton1 or
+                input.UserInputType==Enum.UserInputType.Touch) then
+                sliding=false;update(input.Position.X,true)
+            end
+        end)
+        return function(value)
+            pct=math.clamp(tonumber(value) or pct,1,100)
+            out.Text=tostring(pct).."%"
+            fill.Size=UDim2.fromScale(pct/100,1)
+            knob.Position=UDim2.new(pct/100,0,.5,0)
+        end
     end
-    label(visual,"Scope optics modify ONLY depth-of-field at zoom.\nNo new GPU shaders, ray-tracing or gameplay physics.",205,52)
-    local style=pages.STYLE
-    label(style,"PANEL APPEARANCE / OWN ASSET ID",0)
-    local asset=obj("TextBox",{
-        Name="BackgroundAssetId",Text="",PlaceholderText="rbxassetid://12345678",
-        ClearTextOnFocus=false,Size=UDim2.fromOffset(406,36),
-        Position=UDim2.fromOffset(0,34),ZIndex=3,
-        BackgroundColor3=Color3.fromRGB(40,42,44),BorderSizePixel=0,
-        Font=Enum.Font.Code,TextColor3=Color3.fromRGB(237,237,237),
-        PlaceholderColor3=Color3.fromRGB(124,129,132),TextSize=13
-    },style);round(asset)
-    local function setAsset()
-        local id=asset.Text:match("(%d+)")
-        bg.Image=id and ("rbxassetid://"..id) or ""
+    local weather=pages.WETTER
+    weather.CanvasSize=UDim2.fromOffset(0,570)
+    caption(weather,"NIEDERSCHLAG",0)
+    local function setMode(mode)
+        pcall(function()ctx.Base.SetWeatherMode(mode)end)
+        if mode=="RAIN" then
+            ctx.Base.SetWeatherIntensityFraction((ctx.Options.RainPercent or 65)/100)
+        elseif mode=="SNOW" then
+            ctx.Base.SetWeatherIntensityFraction((ctx.Options.SnowPercent or 50)/100)
+        end
     end
-    ctx.Link(asset.FocusLost,function(enter)
-        if enter then setAsset() end
+    button(weather,"REGEN",UDim2.fromOffset(6,35),UDim2.fromOffset(104,38),
+        function()ctx.Options.Storm=false;setMode("RAIN")end)
+    button(weather,"SCHNEE",UDim2.fromOffset(121,35),UDim2.fromOffset(104,38),
+        function()ctx.Options.Storm=false;setMode("SNOW")end)
+    button(weather,"KLAR",UDim2.fromOffset(236,35),UDim2.fromOffset(104,38),
+        function()ctx.Options.Storm=false;setMode("OFF")end)
+    button(weather,"STURM",UDim2.fromOffset(351,35),UDim2.fromOffset(104,38),
+        function()ctx.Options.Storm=true;setMode("RAIN")end)
+    slider(weather,"Regenstaerke",94,ctx.Options.RainPercent or 65,function(v)
+        ctx.Options.RainPercent=v
+        if ctx.Base.weatherMode=="RAIN" then ctx.Base.SetWeatherIntensityFraction(v/100)end
     end)
-    button(style,"Load","APPLY IMAGE",0,80,196,36,setAsset)
-    button(style,"ResetImage","REMOVE IMAGE",210,80,196,36,function()asset.Text="";bg.Image="" end)
-    button(style,"Corners","CORNER RADIUS  ↻",0,132,196,36,function()
-        theme.radius=({7,11,18,25})[({[7]=2,[11]=3,[18]=4,[25]=1})[theme.radius] or 2]
-        for _,corner in ipairs(corners) do corner.CornerRadius=UDim.new(0,theme.radius) end
+    slider(weather,"Schneestaerke",175,ctx.Options.SnowPercent or 50,function(v)
+        ctx.Options.SnowPercent=v
+        if ctx.Base.weatherMode=="SNOW" then ctx.Base.SetWeatherIntensityFraction(v/100)end
     end)
-    button(style,"Opacity","PANEL OPACITY  ↻",210,132,196,36,function()
-        theme.opacity=theme.opacity>.13 and .02 or theme.opacity+.06
-        panel.BackgroundTransparency=theme.opacity
+    slider(weather,"Niederschlag / Audio",257,ctx.Options.RainVolumePercent or 55,function(v)
+        ctx.Options.RainVolumePercent=v
+        if ctx.Audio then ctx.Audio.SetRainVolume(v/100)end
     end)
-    button(style,"Accent","NEUTRAL ACCENT  ↻",0,184,406,36,function()
-        local colors={
-            Color3.fromRGB(189,198,207),
-            Color3.fromRGB(231,224,211),
-            Color3.fromRGB(160,182,193)}
-        local index=1
-        for i,c in ipairs(colors) do if c==theme.accent then index=i end end
-        theme.accent=colors[index%#colors+1]
-        for _,b in ipairs(accents) do b.TextColor3=theme.accent end
+    caption(weather,"WETTER-STATUS",355)
+    local report=textLabel(weather,"Wetterphysik wird geladen ...",
+        UDim2.fromOffset(6,390),UDim2.fromOffset(445,100),
+        12,Color3.fromRGB(182,194,201))
+    report.TextWrapped=true;report.TextYAlignment=Enum.TextYAlignment.Top
+    local looks=pages.LOOKS
+    looks.CanvasSize=UDim2.fromOffset(0,670)
+    caption(looks,"GRAFIKPROFILE",2)
+    local profiles=ctx.Styles and ctx.Styles.List() or {"Realism","Anime"}
+    for i,name in ipairs(profiles) do
+        local col=(i-1)%2
+        local row=math.floor((i-1)/2)
+        button(looks,name,UDim2.fromOffset(6+col*224,38+row*51),
+            UDim2.fromOffset(212,41),function()
+                if ctx.Styles then ctx.Styles.Set(name)end
+            end)
+    end
+    local looksBase=38+math.ceil(#profiles/2)*51+12
+    slider(looks,"Stil-Intensitaet",looksBase,ctx.Options.StylePercent or 85,function(v)
+        ctx.Options.StylePercent=v
     end)
-    label(style,"Backgrounds require Roblox-approved image asset IDs.\nArbitrary disk PNG and animated GIF are not supported.",236,45)
-
-    local footer=label(panel,"F6 status  ·  F7 weather  ·  F8 power  ·  F9 strength",452,24)
-    footer.Position=UDim2.fromOffset(14,455)
-    footer.Size=UDim2.new(1,-28,0,24)
-    footer.TextColor3=theme.accent;accents[#accents+1]=footer
-    local dragging,lastPos,startPos=false,nil,nil
-    ctx.Link(heading.InputBegan,function(input)
+    local audio=pages.AUDIO
+    audio.CanvasSize=UDim2.fromOffset(0,470)
+    caption(audio,"MUSIK  /  NUR LOKAL",0)
+    local song=field(audio,"Roblox Audio Asset-ID",UDim2.fromOffset(6,36),UDim2.fromOffset(440,39))
+    button(audio,"PLAY",UDim2.fromOffset(6,91),UDim2.fromOffset(212,39),function()
+        if ctx.Audio then ctx.Audio.PlayMusic(song.Text) end
+    end)
+    button(audio,"STOP",UDim2.fromOffset(230,91),UDim2.fromOffset(216,39),function()
+        if ctx.Audio then ctx.Audio.StopMusic() end
+    end)
+    slider(audio,"Musiklautstaerke",155,35,function(v)
+        if ctx.Audio then ctx.Audio.MusicVolume(v/100) end
+    end)
+    textLabel(audio,"Sound bleibt auf deinem Client. Ein Lua-Skript kann\n"
+        .."Musik nicht als Mikrofon an andere Spieler senden.",
+        UDim2.fromOffset(6,252),UDim2.fromOffset(445,50),12,
+        Color3.fromRGB(168,185,194)).TextWrapped=true
+    caption(audio,"Roblox-Audioassets muessen nutzbar sein",322)
+    local custom=pages.CUSTOM
+    custom.CanvasSize=UDim2.fromOffset(0,760)
+    caption(custom,"FENSTER-DESIGN",0)
+    slider(custom,"Eckenradius",37,55,function(v)
+        theme.radius=math.floor(v*.25)+1
+        for _,c in ipairs(rounds) do c.CornerRadius=UDim.new(0,theme.radius)end
+    end)
+    slider(custom,"Transparenz",118,6,function(v)
+        theme.windowOpacity=math.min(.65,v/140)
+        animate(gui,{BackgroundTransparency=theme.windowOpacity},.12)
+    end)
+    caption(custom,"UI-Hintergrund  /  Roblox Image Asset-ID",207)
+    local art=field(custom,"rbxassetid://...",UDim2.fromOffset(6,241),UDim2.fromOffset(440,37))
+    button(custom,"BILD ANWENDEN",UDim2.fromOffset(6,293),
+        UDim2.fromOffset(212,36),function()
+            local id=art.Text:match("(%d+)")
+            background.Image=id and "rbxassetid://"..id or ""
+        end)
+    button(custom,"ENTFERNEN",UDim2.fromOffset(230,293),
+        UDim2.fromOffset(216,36),function()
+            art.Text="";background.Image=""
+        end)
+    caption(custom,"KEYBINDS",352)
+    local binds={
+        {"Menu","MENUE",theme.key},
+        {"Toggle","REALISMUS",ctx.Base.Keybinds.Toggle},
+        {"Weather","WETTER",ctx.Base.Keybinds.Weather},
+        {"Intensity","INTENSITAET",ctx.Base.Keybinds.Intensity},
+        {"Details","STATUS",ctx.Base.Keybinds.Details}
+    }
+    local awaiting=nil
+    local keyButtons={}
+    for i,v in ipairs(binds) do
+        keyButtons[v[1]]=button(custom,v[2].."   ["..v[3].Name.."]",
+            UDim2.fromOffset(6,388+(i-1)*48),UDim2.fromOffset(440,38),
+            function()
+                awaiting=v[1]
+                keyButtons[v[1]].Text=v[2].."   [TASTE DRUECKEN]"
+            end)
+    end
+    -- Remapping works through the original core, not a fake additional hotkey.
+    ctx.Link(U.InputBegan,function(input,processed)
+        if awaiting then
+            if input.UserInputType~=Enum.UserInputType.Keyboard then return end
+            local name=awaiting;awaiting=nil
+            if input.KeyCode~=Enum.KeyCode.Unknown then
+                if name=="Menu" then
+                    theme.key=input.KeyCode
+                else
+                    ctx.Base.SetKeybind(name,input.KeyCode)
+                end
+            end
+            for _,v in ipairs(binds) do
+                local key=v[1]=="Menu" and theme.key or ctx.Base.Keybinds[v[1]]
+                keyButtons[v[1]].Text=v[2].."   ["..key.Name.."]"
+            end
+            return
+        end
+        if not processed and input.KeyCode==theme.key then
+            visible(not gui.Visible)
+        end
+    end)
+    -- Smooth panel dragging; never forcibly changes mouse cursor state.
+    local dragging=false
+    local begin=nil
+    local saved=nil
+    ctx.Link(top.InputBegan,function(input)
         if input.UserInputType==Enum.UserInputType.MouseButton1 then
-            dragging=true;lastPos=input.Position;startPos=panel.Position
+            dragging=true;begin=input.Position;saved=gui.Position
+        end
+    end)
+    ctx.Link(U.InputChanged,function(input)
+        if dragging and input.UserInputType==Enum.UserInputType.MouseMovement then
+            local delta=input.Position-begin
+            gui.Position=UDim2.new(saved.X.Scale,saved.X.Offset+delta.X,
+                saved.Y.Scale,saved.Y.Offset+delta.Y)
         end
     end)
     ctx.Link(U.InputEnded,function(input)
         if input.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end
     end)
-    ctx.Link(U.InputChanged,function(input)
-        if dragging and input.UserInputType==Enum.UserInputType.MouseMovement then
-            local delta=input.Position-lastPos
-            panel.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+delta.X,
-                startPos.Y.Scale,startPos.Y.Offset+delta.Y)
-        end
-    end)
-    ctx.Link(close.MouseButton1Click,function()
-        panel.Visible=false;open.Visible=true
-    end)
-    ctx.Link(open.MouseButton1Click,function()
-        panel.Visible=true;open.Visible=false
-    end)
-    ctx.Link(U.InputBegan,function(input,processed)
-        if not processed and input.KeyCode==Enum.KeyCode.F10 then
-            panel.Visible=not panel.Visible;open.Visible=not panel.Visible
-        end
-    end)
-    local last=0
+    local refresh=0
     ctx.AddRender(function(dt)
-        last+=dt
-        if last<.45 then return end
-        last=0
-        if activePage=="WEATHER" then
-            local base=ctx.Base
-            telemetry.Text=string.format(
-                "Mode: %s  |  intensity %.1fx\n"
-                .."Core physics: %.1f / 90 Hz  |  missed %.3fs\n"
-                .."World puddles: %d  |  snow cells: %d\n"
-                .."Body droplets: %d  |  body impacts: %d",
-                tostring(base.weatherMode),tonumber(base.weatherIntensity) or 1,
-                tonumber(base.weatherPhysicsMeasuredHz) or 0,
-                tonumber(base.weatherDroppedPhysicsTime) or 0,
-                tonumber(base.weatherWetCells) or 0,tonumber(base.weatherSnowCells) or 0,
-                tonumber(ctx.Stats.BodyDrops) or 0,tonumber(ctx.Stats.BodyImpacts) or 0)
-        elseif activePage=="VISUALS" then
-            for key,b in pairs(flagButtons) do
-                b.Text=key.."  /  "..(ctx.Options[key] and "ON" or "OFF")
-            end
-        end
+        refresh+=dt
+        if refresh<.38 then return end
+        refresh=0
+        local base=ctx.Base
+        report.Text=string.format(
+            "Wetter: %s  /  %d%%\nPhysik: %.1f Hz (Ziel 90)\n"
+            .."Schneehuegel: %d  ·  Pfuetzen: %d\n"
+            .."Aufprall: %d  ·  3D-Spritzer: %d",
+            tostring(base.weatherMode or "OFF"),
+            math.floor((base.weatherIntensity or 1)*100+.5),
+            tonumber(base.weatherPhysicsMeasuredHz) or 0,
+            tonumber(ctx.Stats.OrganicSnowMounds) or 0,
+            tonumber(ctx.Stats.OrganicPuddles) or 0,
+            tonumber(ctx.Stats.WeatherImpacts) or 0,
+            tonumber(ctx.Stats.SplashImpacts) or 0)
+        status.Text=string.format("%.0f HZ / LOCAL",tonumber(ctx.PhysicsActual) or 0)
     end)
-    return {Name="Custom black UI",Stop=function()
+    return {Name="Custom UI v5.2",Stop=function()
         if legacy and legacy.Parent then legacy.Enabled=true end
     end}
 end

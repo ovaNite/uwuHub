@@ -5,7 +5,7 @@ return function(ctx)
     local rng = Random.new()
     local pools, attached = {}, {}
     local character, humanoid, root
-    local spawnClock, roofClock = 0, 0
+    local spawnClock, roofClock, gearClock = 0, 0, 0
     local outside, surfaceHits = true, 0
     local limit = 68
 
@@ -95,6 +95,27 @@ return function(ctx)
         if mode=="OFF" or not character or not character.Parent then
             for _,d in ipairs(pools) do if d.life>0 then release(d) end end
             return
+        end
+        gearClock+=dt
+        if gearClock>.8 then
+            gearClock=0
+            attached=limbList(character)
+            local tool=character and character:FindFirstChildOfClass("Tool")
+            if tool then
+                local h=tool:FindFirstChild("Handle")
+                if h and h:IsA("BasePart") then attached[#attached+1]=h end
+            end
+            local camera=W.CurrentCamera
+            local vm=camera and (camera:FindFirstChild("Viewmodel") or camera:FindFirstChild("ViewModel"))
+            if vm then
+                for _,p in ipairs(vm:GetDescendants()) do
+                    if p:IsA("BasePart") and (p.Name=="Handle" or p.Name=="Scope"
+                        or p.Name=="Barrel" or p.Name=="Muzzle") then
+                        attached[#attached+1]=p
+                        if #attached>=20 then break end
+                    end
+                end
+            end
         end
         roofClock+=dt
         if roofClock>.45 and root then

@@ -925,31 +925,10 @@ local function spawnParticle(d, focus, now)
 end
 
 updatePuddleOrSnow = function(cell)
-    -- The base core uses rounded lenses, while the add-on creates irregular hills.
-    local water,snow = cell.water,cell.snow
-    local n=(cell.normal and cell.normal.Unit) or Vector3.yAxis
-    local right=(math.abs(n.X)<.85 and Vector3.xAxis or Vector3.zAxis)
-    right=(right - n * right:Dot(n)).Unit
-    local forward=right:Cross(n)
-    local rot=CFrame.fromMatrix(cell.pos,right,n,forward)
-    if water < .018 then
-        hidePart(cell.wetPart)
-    else
-        local w=CELL_SIZE*math.clamp(math.sqrt(water/.6),.13,.85)
-        local thick=.014+water*.008
-        cell.wetMesh.Scale=Vector3.new(w,thick,w*.76)
-        cell.wetPart.CFrame=rot*CFrame.new(0,thick*.18,0)
-        cell.wetPart.Transparency=math.clamp(.78-water*.09,.57,.87)
-    end
-    if snow < .025 then
-        hidePart(cell.snowPart)
-    else
-        local w=CELL_SIZE*math.clamp(math.sqrt(snow/.7),.12,.60)
-        local height=.018+.12*(snow^1.05)
-        cell.snowMesh.Scale=Vector3.new(w,height,w*.82)
-        cell.snowPart.CFrame=rot*CFrame.new(.11*math.sin(cell.seed),height*.25,.13*math.cos(cell.seed))
-        cell.snowPart.Transparency=math.clamp(.51-snow*.24,.08,.54)
-    end
+    -- Single renderer policy: the organic-surface module owns all visible
+    -- snow/puddle shapes. Keep original grid/mass physics, hide duplicate proxies.
+    hidePart(cell.wetPart)
+    hidePart(cell.snowPart)
 end
 local function surfaceStep(dt)
     if weather.cellCount == 0 then return end

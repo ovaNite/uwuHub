@@ -86,19 +86,20 @@ return function(ctx)
     end
     ctx.AddRender(function(dt)
         local enabled=ctx.Base.enabled and ctx.Options.StyleEnabled~=false
+        local strength=math.clamp((tonumber(ctx.Options.StylePercent) or 85)/100,0,1)
         grade.Enabled=enabled;bloom.Enabled=enabled;sun.Enabled=enabled
         local cam=W.CurrentCamera
         if not enabled then
             for _,star in ipairs(stars) do star.p.Transparency=1 end
             return
         end
-        grade.TintColor=grade.TintColor:Lerp(profile.tint,math.clamp(dt*2.2,0,1))
-        grade.Brightness=interp(grade.Brightness,profile.b,dt)
-        grade.Contrast=interp(grade.Contrast,profile.c,dt)
-        grade.Saturation=interp(grade.Saturation,profile.s,dt)
+        grade.TintColor=grade.TintColor:Lerp(Color3.new(1,1,1):Lerp(profile.tint,strength),math.clamp(dt*2.2,0,1))
+        grade.Brightness=interp(grade.Brightness,profile.b*strength,dt)
+        grade.Contrast=interp(grade.Contrast,profile.c*strength,dt)
+        grade.Saturation=interp(grade.Saturation,profile.s*strength,dt)
         local day=math.clamp(math.sin((L.ClockTime-6)*math.pi/12),0,1)
-        bloom.Intensity=interp(bloom.Intensity,profile.bloom,dt)
-        sun.Intensity=interp(sun.Intensity,profile.rays*day,dt)
+        bloom.Intensity=interp(bloom.Intensity,profile.bloom*strength,dt)
+        sun.Intensity=interp(sun.Intensity,profile.rays*day*strength,dt)
         galaxyTick+=dt
         if galaxyTick>.13 then
             galaxyTick=0

@@ -317,9 +317,9 @@ local STATE = {
   AimLockStrength = 100,
   SilentAim = false,
   SilentAimMode = "Snap",
+  SilentHookSupported = false,
   SilentVisibleCheck = true,
   SilentTargetPart = "Head",
-  SilentHitChance = 100,
   NoHookMode = "ULTRA",
   AutoAim = false,
   RageBot = false,
@@ -3209,39 +3209,16 @@ setFPSBoost = function(enabled)
   end)
 end
 
--- NovaX v1.1 Snap aim assist.
--- Standard Roblox client APIs only: no metatable hooks, no remote firing.
--- Hold Mouse1 to keep the camera aligned; release immediately stops assistance.
-local silentAimRng=Random.new()
-local silentHoldDown=false
-local silentHoldAccepted=false
-local silentHoldPartMode="Head"
-local silentTargetPart=nil
-local silentTargetRefresh=0
-
-local function resolveSilentPartMode()
-  local mode=tostring(STATE.SilentTargetPart or "Head")
-  if mode~="Random" then return mode end
-  local choices={"Head","UpperTorso","LowerTorso","HumanoidRootPart"}
-  return choices[silentAimRng:NextInteger(1,#choices)]
-end
-
-local function getSilentPartForPlayer(player,mode)
-  local character=player and player.Character
-  if not character then return nil end
-  local head=character:FindFirstChild("Head")
-  local upper=character:FindFirstChild("UpperTorso")
-  local lower=character:FindFirstChild("LowerTorso")
-  local torso=character:FindFirstChild("Torso")
-  local root=character:FindFirstChild("HumanoidRootPart")
-  if mode=="Head" then return head or upper or torso or root end
-  if mode=="UpperTorso" then return upper or torso or lower or root or head end
-  if mode=="LowerTorso" then return lower or torso or upper or root or head end
-  if mode=="HumanoidRootPart" then return root or torso or upper or lower or head end
-  return head or upper or torso or root
-end
-
-local function getSilentAimTarget(partMode)
+-- NovaX revised two-mode silent aim:
+-- "Snap" turns the visible camera toward a target during a manual shot.
+-- "Hook (Internal)" only modifies eligible CLIENT Workspace:Raycast namecalls
+-- from the active firing window. This is executor-specific and cannot force
+-- server-authoritative hit registration or arbitrary weapon RemoteEvent logic.
+local silentHookTarget=nil
+local silentHookHeartbeat=0
+local silentHookNextRefresh=0
+local silentAimGate
+local function getSilentAimTarget()
   local cam=workspace.CurrentCamera
   if not cam then return nil end
   local center=cam.ViewportSize*.5
@@ -3251,13 +3228,14 @@ local function getSilentAimTarget(partMode)
   local maxRange=math.clamp(tonumber(STATE.AimMaxDist) or 300,20,1000)
   for _,candidate in ipairs(Players:GetPlayers()) do
     if candidate~=LocalPlayer and isAlive(candidate) and isEnemy(candidate,STATE.AimTeamCheck) then
-      local part=getSilentPartForPlayer(candidate,partMode)
+      local part=getPreferredPartFromPlayer(candidate,STATE.SilentTargetPart or "Head")
+        or getPlayerRoot(candidate)
       if part and part:IsA("BasePart") and part.Parent then
         local delta=part.Position-cam.CFrame.Position
         local distance=delta.Magnitude
         if distance>0 and distance<=maxRange then
-          local screen,onScreen=cam:WorldToViewportPoint(part.Position)
-          if onScreen and screen.Z>0 then
+          local screen,visible=cam:WorldToViewportPoint(part.Position)
+          if visible and screen.Z>0 then
             local pixel=(Vector2.new(screen.X,screen.Y)-Vector2.new(center.X,center.Y)).Magnitude
             if pixel<=maxFOV and (not STATE.SilentVisibleCheck or isVisible(part)) then
               local metric=pixel+distance*.003
@@ -3270,68 +3248,114 @@ local function getSilentAimTarget(partMode)
   end
   return best
 end
-
-local function releaseSilentAimHold()
-  silentHoldDown=false
-  silentHoldAccepted=false
-  silentTargetPart=nil
-  silentTargetRefresh=0
-end
-
-local function beginSilentAimHold()
-  if not RUNNING or not STATE.SilentAim or STATE.SilentAimMode~="Snap" then return end
-  if silentHoldDown then return end
-  silentHoldDown=true
-  silentHoldPartMode=resolveSilentPartMode()
-  local chance=math.clamp(math.floor(tonumber(STATE.SilentHitChance) or 100),0,100)
-  -- One roll per physical press. Holding does not spam or reroll every frame.
-  silentHoldAccepted=chance>0 and (chance>=100 or silentAimRng:NextInteger(1,100)<=chance)
-  silentTargetRefresh=.05
-  if silentHoldAccepted then
-    silentTargetPart=getSilentAimTarget(silentHoldPartMode)
+local function installInternalRayHook()
+  if not hasSilentHookSupport() then return false end
+  local env=(getgenv and getgenv()) or _G
+  if type(env.NX_INTERNAL_RAY_HOOK)=="table" and env.NX_INTERNAL_RAY_HOOK.installed then
+    silentAimGate=env.NX_INTERNAL_RAY_HOOK
+    return true
   end
+  local gate={installed=false,enabled=false,untilTime=0,target=nil}
+  local original
+  local hookOK,hookError=pcall(function()
+    original=hookmetamethod(game,"__namecall",newcclosure(function(self,...)
+      local method=getnamecallmethod()
+      if method~="Raycast" or self~=workspace or not gate.enabled then
+        return original(self,...)
+      end
+      if type(checkcaller)=="function" then
+        local okCheck,localCall=pcall(checkcaller)
+        if okCheck and localCall then return original(self,...) end
+      end
+      local args={...}
+      local origin,direction=args[1],args[2]
+      local target=gate.target
+      if typeof(origin)~="Vector3" or typeof(direction)~="Vector3"
+        or not target or not target.Parent or direction.Magnitude<12 then
+        return original(self,...)
+      end
+      local cam=workspace.CurrentCamera
+      if not cam or (origin-cam.CFrame.Position).Magnitude>12 then
+        return original(self,...)
+      end
+      local toward=target.Position-origin
+      if toward.Magnitude<.5 then return original(self,...) end
+      args[2]=toward.Unit*direction.Magnitude
+      return original(self,table.unpack(args))
+    end))
+  end)
+  if not hookOK then
+    nxWarn("[NovaX] Internal hook could not be installed: "..tostring(hookError))
+    return false
+  end
+  gate.installed=true
+  env.NX_INTERNAL_RAY_HOOK=gate
+  silentAimGate=gate
+  return true
 end
-
-local function updateSilentAimHold(dt)
-  if not silentHoldDown then return end
-  if not RUNNING or not STATE.SilentAim or STATE.SilentAimMode~="Snap" then
-    releaseSilentAimHold()
+local silentFireHeld=false
+local function silentAimInput()
+  if not RUNNING or not STATE.SilentAim then return end
+  if STATE.SilentAimMode=="Hook (Internal)" then
+    if not silentAimGate or not silentAimGate.installed then
+      if not installInternalRayHook() then
+        featureUnavailable("Internal Silent Aim",
+          "hookmetamethod/newcclosure/getnamecallmethod unavailable; switch to Snap")
+        return
+      end
+    end
+    silentHookTarget=getSilentAimTarget()
+    silentAimGate.target=silentHookTarget
+    silentAimGate.enabled=silentHookTarget~=nil
     return
   end
-  if not silentHoldAccepted then return end
-  silentTargetRefresh+=dt
-  if silentTargetRefresh>=.05 or not silentTargetPart or not silentTargetPart.Parent then
-    silentTargetRefresh=0
-    silentTargetPart=getSilentAimTarget(silentHoldPartMode)
-  end
-  local cam=workspace.CurrentCamera
-  local target=silentTargetPart
-  if not cam or not target or not target.Parent then return end
-  local origin=cam.CFrame.Position
-  local direction=target.Position-origin
-  if direction.Magnitude>.01 then
-    cam.CFrame=CFrame.lookAt(origin,target.Position,cam.CFrame.UpVector)
+  if STATE.SilentAimMode~="Hook (Internal)" then
+    local target=getSilentAimTarget()
+    local cam=workspace.CurrentCamera
+    if cam and target then
+      -- User-visible camera snap. Weapon firing is left to the real game,
+      -- avoiding the original unwanted RemoteEvent:FireServer() calls.
+      cam.CFrame=CFrame.lookAt(cam.CFrame.Position,target.Position)
+    end
   end
 end
-
 setupGrabber=function()
-  -- Explicitly force the executor-independent camera mode; no hook APIs used.
-  STATE.SilentAimMode="Snap"
-  addConnection("silent_aim_begin",UserInputService.InputBegan:Connect(function(input,processed)
-    if input.UserInputType==Enum.UserInputType.MouseButton1 and not processed then
-      beginSilentAimHold()
-    end
-  end))
-  addConnection("silent_aim_end",UserInputService.InputEnded:Connect(function(input)
-    -- Always release even when the game/UI marked the input as processed.
+  if hasSilentHookSupport() then installInternalRayHook() end
+  addConnection("silent_aim_click",UserInputService.InputBegan:Connect(function(input,processed)
+    if processed then return end
     if input.UserInputType==Enum.UserInputType.MouseButton1 then
-      releaseSilentAimHold()
+      silentFireHeld=true
+      silentAimInput()
     end
   end))
-  addConnection("silent_aim_focus_release",UserInputService.WindowFocusReleased:Connect(
-    releaseSilentAimHold
-  ))
-  addConnection("silent_aim_render",RunService.RenderStepped:Connect(updateSilentAimHold))
+  addConnection("silent_aim_release",UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType==Enum.UserInputType.MouseButton1 then
+      silentFireHeld=false
+      if silentAimGate then silentAimGate.enabled=false; silentAimGate.target=nil end
+    end
+  end))
+  addConnection("silent_aim_focus",UserInputService.WindowFocusReleased:Connect(function()
+    silentFireHeld=false
+    if silentAimGate then silentAimGate.enabled=false; silentAimGate.target=nil end
+  end))
+  addConnection("silent_aim_cache",RunService.Heartbeat:Connect(function(dt)
+    if not RUNNING or not STATE.SilentAim
+      or STATE.SilentAimMode~="Hook (Internal)" or not silentFireHeld
+      or not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+      if silentAimGate then silentAimGate.enabled=false; silentAimGate.target=nil end
+      silentHookHeartbeat=0
+      return
+    end
+    silentHookHeartbeat+=dt
+    if silentHookHeartbeat>=.085 then
+      silentHookHeartbeat=0
+      silentHookTarget=getSilentAimTarget()
+      if silentAimGate then
+        silentAimGate.target=silentHookTarget
+        silentAimGate.enabled=silentHookTarget~=nil
+      end
+    end
+  end))
   return true
 end
 
@@ -4128,6 +4152,11 @@ featureUnavailable = function(name, reason)
   featureNoticeAt[key] = now
   nxWarn("[NovaX] " .. tostring(name or "Feature") .. ": " .. tostring(reason or "nicht verfuegbar"))
 end
+function hasSilentHookSupport()
+  local supported=SUPPORT.MetaHook and typeof(hookmetamethod) == "function"
+  STATE.SilentHookSupported=supported and true or false
+  return supported
+end
 function setControlFromState(control,value) if control then pcall(function() if control.Set then control:Set(value) elseif control.SetValue then control:SetValue(value) end end) end end
 function bindStateControl(key,control,sync) if not key or not control then return control end; stateControlRefs[key]=stateControlRefs[key] or {}; table.insert(stateControlRefs[key],{control=control,sync=sync}); return control end
 function syncStateControlsFromState() for key,refs in pairs(stateControlRefs) do for _,entry in ipairs(refs) do if entry.sync then pcall(entry.sync,STATE[key],entry.control) else setControlFromState(entry.control,STATE[key]) end end end end
@@ -4683,45 +4712,23 @@ end
       "SilentAimMode",
       c:CreateDropdown({
         Name = "Mode",
-        Options = {"Snap"},
-        CurrentOption = {"Snap"},
-        Callback = function()
-          STATE.SilentAimMode="Snap"
+        Options = {"Snap", "Hook (Internal)"},
+        CurrentOption = {STATE.SilentAimMode},
+        Callback = function(v)
+          local selected = type(v)=="table" and v[1] or tostring(v)
+          if selected=="Hook (Internal)" and not hasSilentHookSupport() then
+            featureUnavailable("Silent Aim Hook", "Executor does not expose the required hook functions")
+            selected="Snap"
+          end
+          STATE.SilentAimMode=selected
+          if silentAimGate then silentAimGate.enabled=false end
           syncStateControlsFromState()
         end
       }),
-      function(_,o)
-        setControlFromState(o,"Snap")
+      function(v, o)
+        setControlFromState(o,tostring(v or "Snap"))
       end
     )
-    c:CreateLabel("Snap uses standard camera APIs — no executor hook required.")
-    bindStateControl(
-      "SilentTargetPart",
-      c:CreateDropdown({
-        Name = "Hit Part",
-        Options = {"Head","UpperTorso","LowerTorso","HumanoidRootPart","Random"},
-        CurrentOption = {STATE.SilentTargetPart},
-        Callback = function(v)
-          STATE.SilentTargetPart=type(v)=="table" and v[1] or tostring(v)
-        end
-      }),
-      function(v,o)
-        setControlFromState(o,tostring(v or "Head"))
-      end
-    )
-    bindStateControl(
-      "SilentHitChance",
-      c:CreateSlider({
-        Name = "Hitchance / Hold",
-        Range = {0,100},
-        Increment = 1,
-        CurrentValue = STATE.SilentHitChance,
-        Callback = function(v)
-          STATE.SilentHitChance=math.clamp(math.floor(tonumber(v) or 100),0,100)
-        end
-      })
-    )
-    c:CreateLabel("One chance roll per Mouse1 press; hold tracks without repeated input.")
   end
   
   local ET = Win:CreateTab("ESP", 4483345998)

@@ -610,7 +610,7 @@ local function stormWind(t, snow)
 end
 local function isStationarySurface(hit)
     if not hit or hit.Material == Enum.Material.Water then return false end
-    if hit.Normal.Y < 0.955 then return false end
+    if hit.Normal.Y < 0.61 then return false end
     if hit.Instance and hit.Instance:IsA("BasePart") then
         if not hit.Instance.Anchored then return false end
         if hit.Instance.Transparency > 0.3 then return false end

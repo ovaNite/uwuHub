@@ -1574,15 +1574,16 @@ function getClosest(fov, teamCheck, maxDist, checkVis, forceHead, preferredPart)
               why.tooFar = why.tooFar + 1
             else
               local lookDir = head.Position - Camera.CFrame.Position
-              if lookDir.Magnitude > 0.001 and Camera.CFrame.LookVector:Dot(lookDir.Unit) < 0 then
+              if STATE.AimFOVCircle and lookDir.Magnitude > 0.001 and Camera.CFrame.LookVector:Dot(lookDir.Unit) < 0 then
                 why.behind = why.behind + 1
               else
                 local sp, os = worldToScreen(head.Position)
-                if not os then
+                if STATE.AimFOVCircle and not os then
                   why.offscreen = why.offscreen + 1
                 else
-                  local dist = (sp - center).Magnitude
-                  if dist > safeNum(fov) then
+                  local dist = STATE.AimFOVCircle and (sp - center).Magnitude
+                    or (lookDir.Magnitude > 0.001 and (1 - Camera.CFrame.LookVector:Dot(lookDir.Unit)) or 2)
+                  if STATE.AimFOVCircle and dist > safeNum(fov) then
                     why.outsideFov = why.outsideFov + 1
                   elseif checkVis and not isVisibleCached(head) then
                     why.hidden = why.hidden + 1
@@ -1776,7 +1777,15 @@ function mouseAimStep(targetPos, smooth, mode, speedFactor)
   end
   
   local sp, onScreen = worldToScreen(targetPos)
-  if not onScreen then return false end
+  if not onScreen then
+    if STATE.AimFOVCircle then return false end
+    local origin=Camera.CFrame.Position
+    if (targetPos-origin).Magnitude<0.01 then return false end
+    local aim=CFrame.lookAt(origin,targetPos)
+    local alpha=math.clamp(1 / math.max(1,tonumber(smooth) or 1),0.02,1)
+    Camera.CFrame=Camera.CFrame:Lerp(aim,alpha)
+    return true
+  end
   
   local center, arSightCompActive = getAimScreenCenter()
   local delta = sp - center
@@ -1948,7 +1957,7 @@ function isAutoAimTargetValid(t)
   end
   
   local sp, onScreen = worldToScreen(aimPos)
-  if not onScreen then
+  if STATE.AimFOVCircle and not onScreen then
     return false
   end
   
@@ -1962,7 +1971,7 @@ function isAutoAimTargetValid(t)
   
   local center = getAimScreenCenter()
   local dist2d = (sp - center).Magnitude
-  if dist2d > safeNum(STATE.AimFOV) * 1.55 then
+  if STATE.AimFOVCircle and dist2d > safeNum(STATE.AimFOV) * 1.55 then
     return false
   end
   
@@ -1985,7 +1994,7 @@ function isAimLockTargetValid(t)
   end
   
   local sp, onScreen = worldToScreen(lockPart.Position)
-  if not onScreen then
+  if STATE.AimFOVCircle and not onScreen then
     return false
   end
   
@@ -1998,7 +2007,7 @@ function isAimLockTargetValid(t)
   end
   
   local center = getAimScreenCenter()
-  if (sp - center).Magnitude > safeNum(STATE.AimFOV) * 1.15 then
+  if STATE.AimFOVCircle and (sp - center).Magnitude > safeNum(STATE.AimFOV) * 1.15 then
     return false
   end
   
@@ -3259,10 +3268,11 @@ local function getSilentAimTarget(partMode)
         local distance=delta.Magnitude
         if distance>0 and distance<=maxRange then
           local screen,onScreen=cam:WorldToViewportPoint(part.Position)
-          if onScreen and screen.Z>0 then
+          if not STATE.AimFOVCircle or (onScreen and screen.Z>0) then
             local pixel=(Vector2.new(screen.X,screen.Y)-Vector2.new(center.X,center.Y)).Magnitude
-            if pixel<=maxFOV and (not STATE.SilentVisibleCheck or isVisible(part)) then
-              local metric=pixel+distance*.003
+            if (not STATE.AimFOVCircle or pixel<=maxFOV) and (not STATE.SilentVisibleCheck or isVisible(part)) then
+              local metric=STATE.AimFOVCircle and (pixel+distance*.003)
+                or (1-cam.CFrame.LookVector:Dot(delta.Unit))+distance*.000001
               if metric<bestMetric then best,bestMetric=part,metric end
             end
           end

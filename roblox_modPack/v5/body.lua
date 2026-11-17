@@ -8,6 +8,7 @@ return function(ctx)
     local function rnd(a,b)return rng:NextNumber(a,b)end
     local contacts, pool = {}, {}
     local tScan,tEmit=0,0
+    local exposed=true
     local impacts=0
     local limit=40
     local function lower(p) return string.lower(p.Name or "") end
@@ -130,12 +131,16 @@ return function(ctx)
             tScan=0;contacts=visibleArmAndWeapon()
             local char=player.Character
             rayParams.FilterDescendantsInstances={ctx.Folder,char}
+            local camera=W.CurrentCamera
+            exposed=camera and
+                W:Raycast(camera.CFrame.Position+Vector3.yAxis,
+                    Vector3.new(0,85,0),rayParams)==nil
         end
         local rate=mode=="RAIN" and 12 or 7
         local strength=math.clamp(tonumber(ctx.Base.weatherIntensity) or .65,.01,1)
         if tEmit>1/rate then
             tEmit-=1/rate
-            if rng:NextNumber()<strength and #contacts>0 then emit(mode) end
+            if rng:NextNumber()<strength and #contacts>0 and exposed then emit(mode) end
         end
         local active=0
         for _,d in ipairs(pool) do

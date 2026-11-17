@@ -2,7 +2,7 @@
 -- Developers: Klaus (Dev), Nexus (Bug Fixer)
 -- Original UI/core preserved; Snap supports HitPart, Hitchance and hold/release.
 -- No executor metatable hook is required by Snap.
-local REV="e34e7f8387eda9cf580e8dc7e485a16706c4f628"
+local REV="b274da4166bfdff3bf879bf71c6aa8c1b3bb17fc"
 local BASE="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/novax/v1.1/"
 local env=(getgenv and getgenv()) or _G
 if type(loadstring)~="function" then error("[NovaX] loadstring unavailable") end

@@ -111,6 +111,9 @@ return function(ctx)
             pcall(function() snd:Play() end)
         end
     end
+    ctx.OnBodyWaterHit=function(position,normal)
+        hit(position,normal,false,.015)
+    end
     if type(ctx.Base.AddWeatherImpactListener)=="function" then
         local off=ctx.Base.AddWeatherImpactListener(hit)
         ctx.AddStop(off)

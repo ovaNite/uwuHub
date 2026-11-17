@@ -132,54 +132,127 @@ local okControls,controlsError=pcall(function()
   local run=game:GetService("RunService")
   local workspace=game:GetService("Workspace")
   local fast,muted,rate,volume=false,false,10,100
+  local includeShared=false
   local held,active,nextShot=false,true,0
   local saved=setmetatable({}, {__mode="k"})
+  local watched=setmetatable({}, {__mode="k"})
+  local shotIds,shotIdsAll,shotIdsOther={},{},{}
+  local registryReady=false
   local connections,rootConnections={},{}
+  local soundService=game:GetService("SoundService")
   local function connect(signal,callback,list)
     local c=signal:Connect(callback)
     table.insert(list or connections,c)
     return c
   end
+  -- Some games publish audio metadata as a table. Only use explicitly named
+  -- shooting animations, and exclude IDs also used by other animation types.
+  local function buildShotIds()
+    if not registryReady then
+      local storage=game:GetService("ReplicatedStorage")
+      local modules=storage:FindFirstChild("Modules")
+      local library=modules and modules:FindFirstChild("SoundLibrary")
+      local source=library and library:FindFirstChild("ScrapedAnimationSounds")
+      if source and source:IsA("ModuleScript") then
+        local ok,data=pcall(require,source)
+        if ok and type(data)=="table" then
+          for name,ids in pairs(data) do
+            if type(name)=="string" and type(ids)=="table" then
+              local lower=string.lower(name)
+              local action=lower:match("_([^_]+)$") or lower
+              local shooting=action:match("^shoot%d*$") or action:match("^fire%d*$")
+                or action:match("^shot%d*$") or action=="quickshot"
+              local target=shooting and shotIdsAll or shotIdsOther
+              for _,id in pairs(ids) do
+                if type(id)=="string" then
+                  local numeric=id:match("%d+")
+                  if numeric then target[numeric]=true end
+                end
+              end
+            end
+          end
+          registryReady=true
+        end
+      end
+    end
+    shotIds={}
+    for id in pairs(shotIdsAll) do
+      if includeShared or not shotIdsOther[id] then shotIds[id]=true end
+    end
+  end
   local function isShot(sound)
     if not sound:IsA("Sound") then return false end
+    local id=tostring(sound.SoundId):match("%d+")
+    if id and shotIds[id] then return true end
+    local localRoot=(player.Character and sound:IsDescendantOf(player.Character))
+      or (workspace.CurrentCamera and sound:IsDescendantOf(workspace.CurrentCamera))
+      or (player:FindFirstChildOfClass("Backpack") and sound:IsDescendantOf(player:FindFirstChildOfClass("Backpack")))
+    if not localRoot then return false end
     local name=string.lower(sound.Name)
-    for _,word in ipairs({"shoot","shot","fire","gunshot","gunfire"}) do
+    for _,word in ipairs({"shoot","shot","gunfire","gunshot"}) do
       if string.find(name,word,1,true) then return true end
     end
     return false
   end
-  local function updateSound(sound)
+  local function applySound(sound)
     if not active then return end
-    if not isShot(sound) or (not muted and volume==100) then return end
+    if not isShot(sound) then
+      local original=saved[sound]
+      if original~=nil then saved[sound]=nil;pcall(function() sound.Volume=original end) end
+      return
+    end
     if saved[sound]==nil then saved[sound]=sound.Volume end
-    pcall(function() sound.Volume=muted and 0 or saved[sound]*volume/100 end)
+    local target=muted and 0 or saved[sound]*volume/100
+    if math.abs(sound.Volume-target)>0.0001 then pcall(function() sound.Volume=target end) end
   end
-  local function scan(root)
-    if not root then return end
-    for _,obj in ipairs(root:GetDescendants()) do updateSound(obj) end
+  local function trackSound(sound)
+    if not active or not sound:IsA("Sound") then return end
+    if watched[sound] then applySound(sound);return end
+    local soundLinks={}
+    watched[sound]=soundLinks
+    connect(sound:GetPropertyChangedSignal("SoundId"),function() applySound(sound) end,soundLinks)
+    connect(sound:GetPropertyChangedSignal("Name"),function() applySound(sound) end,soundLinks)
+    connect(sound:GetPropertyChangedSignal("Volume"),function()
+      if not active or saved[sound]==nil then return end
+      local expected=muted and 0 or saved[sound]*volume/100
+      if math.abs(sound.Volume-expected)>0.0001 then saved[sound]=sound.Volume;applySound(sound) end
+    end,soundLinks)
+    connect(sound.Destroying,function()
+      for _,connection in ipairs(soundLinks) do connection:Disconnect() end
+      watched[sound]=nil;saved[sound]=nil
+    end,soundLinks)
+    applySound(sound)
+  end
+  local function stopSounds()
+    for _,connection in ipairs(rootConnections) do connection:Disconnect() end
+    for _,links in pairs(watched) do
+      for _,connection in ipairs(links) do connection:Disconnect() end
+    end
+    rootConnections={}
+    watched=setmetatable({}, {__mode="k"})
+    for sound,original in pairs(saved) do pcall(function() sound.Volume=original end) end
+    saved=setmetatable({}, {__mode="k"})
   end
   local function roots()
-    if not active then return end
+    if not active or (not muted and volume==100) then return end
     for _,connection in ipairs(rootConnections) do connection:Disconnect() end
     rootConnections={}
-    for _,root in pairs({character=player.Character,camera=workspace.CurrentCamera,
+    for _,root in pairs({world=workspace,sounds=soundService,
                          backpack=player:FindFirstChildOfClass("Backpack")}) do
-      scan(root)
-      connect(root.DescendantAdded,updateSound,rootConnections)
+      for _,obj in ipairs(root:GetDescendants()) do if obj:IsA("Sound") then trackSound(obj) end end
+      connect(root.DescendantAdded,trackSound,rootConnections)
     end
   end
   local function applySounds()
-    for sound,original in pairs(saved) do
-      pcall(function() sound.Volume=muted and 0 or original*volume/100 end)
-      if not muted and volume==100 then saved[sound]=nil end
-    end
-    roots()
+    if not muted and volume==100 then stopSounds();return end
+    buildShotIds()
+    for sound in pairs(watched) do applySound(sound) end
+    if #rootConnections==0 then roots() end
   end
   controlsModule={Stop=function()
     active=false
     for _,connection in ipairs(connections) do connection:Disconnect() end
-    for _,connection in ipairs(rootConnections) do connection:Disconnect() end
-    for sound,original in pairs(saved) do pcall(function() sound.Volume=original end) end
+    stopSounds()
   end}
   connect(player.CharacterAdded,function() task.defer(roots) end)
   connect(workspace:GetPropertyChangedSignal("CurrentCamera"),roots)
@@ -209,8 +282,10 @@ local okControls,controlsError=pcall(function()
   tab:CreateSlider({Name="Activations per second",Range={1,20},Increment=1,CurrentValue=10,
     Callback=function(v) rate=math.clamp(tonumber(v) or 10,1,20) end})
   tab:CreateSection("Local shot sounds")
-  tab:CreateLabel("Matches common shot sound names on your character, backpack and camera.")
+  tab:CreateLabel("Uses shooting sound IDs when available and common local sound names.")
   tab:CreateToggle({Name="No Shoot Sound",CurrentValue=false,Callback=function(v) muted=v;applySounds() end})
+  tab:CreateToggle({Name="Include shared shot sounds (may mute other effects)",CurrentValue=false,
+    Callback=function(v) includeShared=v;applySounds() end})
   tab:CreateSlider({Name="Shot volume (%)",Range={0,100},Increment=5,CurrentValue=100,
     Callback=function(v) volume=math.clamp(tonumber(v) or 100,0,100);applySounds() end})
   roots()

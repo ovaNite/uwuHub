@@ -253,7 +253,11 @@ cleanup = function()
     lastControlSpoofAt = 0
     antiVoidNextAt = 0
   end)
-  if silentAimGate then silentAimGate.enabled=false; silentAimGate.target=nil end
+  pcall(function()
+    local g=(getgenv and getgenv()) or _G
+    local hook=g.NX_INTERNAL_RAY_HOOK
+    if type(hook)=="table" then hook.enabled=false;hook.target=nil end
+  end)
   pcall(cleanAllESP)
   pcall(clearAimTargetHighlight)
   pcall(restoreDeviceSpoof)
@@ -271,6 +275,7 @@ cleanup = function()
   end)
   pcall(restoreAntiHitPose)
   pcall(function()
+    if getgenv then getgenv().NX_UI_WINDOW=nil end
     if UI_WINDOW and UI_WINDOW.Destroy then
       UI_WINDOW:Destroy()
     end
@@ -4278,6 +4283,7 @@ function NX_BootGUI()
   GUI_READY = GUI_READY and Win ~= nil
   if GUI_READY then
     UI_WINDOW = Win
+    if getgenv then getgenv().NX_UI_WINDOW = Win end
   end
 end
 

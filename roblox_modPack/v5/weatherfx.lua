@@ -63,6 +63,35 @@ return function(ctx)
     function ctx.Audio.SetRainVolume(x)
         ctx.Options.RainVolume=math.clamp(tonumber(x) or .5,0,1)
     end
+    local lightningSegments={}
+    for i=1,10 do
+        local seg=Instance.new("Part")
+        seg.Name="RM5_LightningArc"
+        seg.Anchored=true;seg.CanCollide=false;seg.CanTouch=false;seg.CanQuery=false
+        seg.CastShadow=false;seg.Material=Enum.Material.Neon
+        seg.Color=Color3.fromRGB(226,238,255)
+        seg.Transparency=1;seg.Size=Vector3.new(.07,1,.07)
+        seg.CFrame=CFrame.new(0,-10000,0)
+        seg.Parent=ctx.Folder;ctx.Track(seg)
+        lightningSegments[#lightningSegments+1]=seg
+    end
+    local function spawnBolt()
+        local camera=W.CurrentCamera
+        if not camera then return end
+        local pos=camera.CFrame.Position
+        local side=Vector3.new(rand(-55,55),0,rand(-55,55))
+        local first=pos+side+Vector3.new(0,95,0)
+        for i,segment in ipairs(lightningSegments) do
+            local nextPos=first+Vector3.new(
+                rand(-3.8,3.8),-rand(6,9),rand(-3.8,3.8))
+            local delta=nextPos-first
+            segment.Size=Vector3.new(rand(.055,.11),delta.Magnitude,rand(.055,.11))
+            segment.CFrame=CFrame.lookAt((first+nextPos)*.5,nextPos)
+                * CFrame.Angles(math.pi/2,0,0)
+            segment.Transparency=rand(.18,.34)
+            first=nextPos
+        end
+    end
     local stamp,impactCounter,thunderClock,lightningT=0,0,0,0
     local flash=Instance.new("ColorCorrectionEffect")
     flash.Name="RM5_LightningFlash";flash.Enabled=false
@@ -173,14 +202,21 @@ return function(ctx)
             if thunderClock>=math.clamp(ctx.Options.ThunderEvery or 17,6,55) then
                 thunderClock=0
                 flash.Enabled=true;flash.Brightness=.19;lightningT=.22
+                spawnBolt()
                 thunderDelayed=rand(.45,2.6)
                 ctx.Stats.LightningCount=(ctx.Stats.LightningCount or 0)+1
             end
-        else thunderClock=0;thunderDelayed=-1;lightningT=0;flash.Enabled=false end
+        else
+            thunderClock=0;thunderDelayed=-1;lightningT=0;flash.Enabled=false
+            for _,seg in ipairs(lightningSegments) do seg.Transparency=1 end
+        end
         if lightningT>0 then
             lightningT-=dt
             flash.Brightness=.19*math.clamp(lightningT/.22,0,1)
-            if lightningT<=0 then flash.Enabled=false end
+            if lightningT<=0 then
+                flash.Enabled=false
+                for _,seg in ipairs(lightningSegments) do seg.Transparency=1 end
+            end
         end
         if thunderDelayed>0 then
             thunderDelayed-=dt

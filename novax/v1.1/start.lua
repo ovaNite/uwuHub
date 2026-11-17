@@ -304,12 +304,14 @@ local okModels,modelError=pcall(function()
   local store=game:GetService("ReplicatedStorage")
   local world=game:GetService("Workspace")
   local cache,originals,links={},{},{}
+  local animationLinks={}
+  local adjustments={x=0,y=0,z=0,rx=0,ry=0,rz=0}
   local active,selected,shown,shownRig=true,"Original",nil,nil
   local options,dropdown={"Original"},nil
   local function clear()
     if shown then shown:Destroy();shown=nil end
     for part,old in pairs(originals) do pcall(function() part.LocalTransparencyModifier=old end) end
-    originals={};shownRig=nil
+    originals={};animationLinks={};shownRig=nil
   end
   local function root()
     local view=world:FindFirstChild("ViewModels")
@@ -355,10 +357,22 @@ local okModels,modelError=pcall(function()
       if container then for _,model in ipairs(container:GetChildren()) do add(model) end end
     end
   end
+  local function adjustment()
+    return CFrame.new(adjustments.x,adjustments.y,adjustments.z)
+      *CFrame.Angles(math.rad(adjustments.rx),math.rad(adjustments.ry),math.rad(adjustments.rz))
+  end
+  local function partPath(part,base)
+    local names={}
+    while part and part~=base do table.insert(names,1,part.Name);part=part.Parent end
+    if part~=base then return nil end
+    return table.concat(names,"/")
+  end
   local function show(target)
     clear()
     local source=cache[selected]
     if not source or not target then return end
+    local prefix=player.Name.." - "
+    if target.Name:sub(#prefix+1)==selected then shownRig=target;return end
     local visual=target:FindFirstChild("ItemVisual")
     local grip=target:FindFirstChild("RightItem")
     if not visual or not grip or not grip:IsA("BasePart") then return end
@@ -366,8 +380,25 @@ local okModels,modelError=pcall(function()
     if not clone then return end
     clone.Name="NovaX_LocalModel"
     clone.Parent=world.CurrentCamera or world
+    clone:PivotTo(grip.CFrame*source.offset*adjustment())
+    local targets={}
     for _,part in ipairs(visual:GetDescendants()) do
-      if part:IsA("BasePart") then originals[part]=part.LocalTransparencyModifier;part.LocalTransparencyModifier=1 end
+      if part:IsA("BasePart") then
+        local path=partPath(part,visual)
+        if path then if targets[path]~=nil then targets[path]=false else targets[path]=part end end
+        originals[part]=part.LocalTransparencyModifier;part.LocalTransparencyModifier=1
+      end
+    end
+    local sources={}
+    for _,part in ipairs(clone:GetDescendants()) do
+      if part:IsA("BasePart") then
+        local path=partPath(part,clone)
+        if path then if sources[path]~=nil then sources[path]=false else sources[path]=part end end
+      end
+    end
+    for path,part in pairs(sources) do
+      local match=targets[path]
+      if part and match then animationLinks[#animationLinks+1]={part=part,target=match,offset=match.CFrame:ToObjectSpace(part.CFrame)} end
     end
     shown=clone;shownRig=target
   end
@@ -379,6 +410,15 @@ local okModels,modelError=pcall(function()
     clear()
   end})
   tab:CreateButton({Name="Refresh loaded models",Callback=scan})
+  tab:CreateSection("Alignment")
+  tab:CreateLabel("Matching parts follow the equipped model; other parts follow the hand.")
+  for _,item in ipairs({{"Offset X","x",-2,2,0.05},{"Offset Y","y",-2,2,0.05},
+    {"Offset Z","z",-2,2,0.05},{"Rotation X","rx",-180,180,5},
+    {"Rotation Y","ry",-180,180,5},{"Rotation Z","rz",-180,180,5}}) do
+    local key=item[2]
+    tab:CreateSlider({Name=item[1],Range={item[3],item[4]},Increment=item[5],CurrentValue=0,
+      Callback=function(value) adjustments[key]=tonumber(value) or 0;clear() end})
+  end
   modelControls={Stop=function()
     active=false
     for _,c in ipairs(links) do c:Disconnect() end
@@ -397,7 +437,14 @@ local okModels,modelError=pcall(function()
     if shown and target then
       local grip=target:FindFirstChild("RightItem")
       local source=cache[selected]
-      if grip and source then pcall(function() shown:PivotTo(grip.CFrame*source.offset) end) else clear() end
+      if grip and source then
+        pcall(function()
+          shown:PivotTo(grip.CFrame*source.offset*adjustment())
+          for _,link in ipairs(animationLinks) do
+            if link.part.Parent and link.target.Parent then link.part.CFrame=link.target.CFrame*link.offset end
+          end
+        end)
+      else clear() end
     end
   end)
   scan()

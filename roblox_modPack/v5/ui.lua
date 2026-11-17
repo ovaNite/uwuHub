@@ -26,8 +26,8 @@ return function(ctx)
         return c
     end
     local panel=obj("Frame",{
-        Name="Panel",Size=UDim2.fromOffset(430,420),
-        Position=UDim2.new(.5,-215,.5,-210),
+        Name="Panel",Size=UDim2.fromOffset(430,490),
+        Position=UDim2.new(.5,-215,.5,-245),
         BackgroundColor3=Color3.fromRGB(15,17,19),
         BackgroundTransparency=theme.opacity,BorderSizePixel=0,
         ClipsDescendants=true
@@ -81,7 +81,7 @@ return function(ctx)
         },tabs);round(b)
         ctx.Link(b.MouseButton1Click,function() activate(name) end)
         pages[name]=obj("Frame",{
-            Size=UDim2.new(1,-24,1,-147),Position=UDim2.fromOffset(12,102),
+            Size=UDim2.new(1,-24,1,-160),Position=UDim2.fromOffset(12,102),
             BackgroundTransparency=1,Visible=i==1,ZIndex=3
         },panel)
     end
@@ -120,6 +120,18 @@ return function(ctx)
     label(weather,"Physics target: 90 fixed steps / second",143)
     local telemetry=label(weather,"Waiting for client physics...",175,95)
     telemetry.TextYAlignment=Enum.TextYAlignment.Top
+    label(weather,"OPTIONAL SNOW STEP SOUND (ROBLOX AUDIO ID)",267,22)
+    local snowSoundInput=obj("TextBox",{
+        Name="SnowSoundId",Text="",PlaceholderText="Approved Roblox sound asset ID",
+        ClearTextOnFocus=false,Size=UDim2.fromOffset(406,30),
+        Position=UDim2.fromOffset(0,295),ZIndex=3,
+        BackgroundColor3=Color3.fromRGB(38,41,43),BorderSizePixel=0,
+        Font=Enum.Font.Code,TextColor3=Color3.fromRGB(236,237,238),
+        PlaceholderColor3=Color3.fromRGB(124,129,132),TextSize=12
+    },weather);round(snowSoundInput)
+    ctx.Link(snowSoundInput.FocusLost,function()
+        ctx.Options.SnowSoundId=snowSoundInput.Text:match("(%d+)")
+    end)
     local visual=pages.VISUALS
     label(visual,"LOCAL EFFECTS / REVERSIBLE",0)
     local flagButtons={}
@@ -173,8 +185,8 @@ return function(ctx)
     end)
     label(style,"Backgrounds require Roblox-approved image asset IDs.\nArbitrary disk PNG and animated GIF are not supported.",236,45)
 
-    local footer=label(panel,"F6 status  ·  F7 weather  ·  F8 power  ·  F9 strength",385,24)
-    footer.Position=UDim2.fromOffset(14,387)
+    local footer=label(panel,"F6 status  ·  F7 weather  ·  F8 power  ·  F9 strength",452,24)
+    footer.Position=UDim2.fromOffset(14,455)
     footer.Size=UDim2.new(1,-28,0,24)
     footer.TextColor3=theme.accent;accents[#accents+1]=footer
     local dragging,lastPos,startPos=false,nil,nil

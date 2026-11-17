@@ -162,7 +162,12 @@ return function(ctx)
                     d.pos+=d.vel*dt
                     -- Gesweepter Kontakt: kein Durchtunneln bei schnellen Tropfen.
                     local hit=ray(old,d.pos-old)
-                    if hit then surfaceHits+=1;release(d)
+                    if hit then
+                        surfaceHits+=1
+                        if type(ctx.OnBodyWaterHit)=="function" then
+                            pcall(ctx.OnBodyWaterHit,hit.Position,hit.Normal)
+                        end
+                        release(d)
                     elseif visual then d.p.CFrame=CFrame.new(d.pos) end
                 else
                     release(d)

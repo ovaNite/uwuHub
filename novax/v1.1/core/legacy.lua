@@ -543,9 +543,8 @@ function loadConfig(name)
   STATE.RageVisibilityCheck = false
   STATE.FPSUnlocker = true
   STATE.InfJumpHeight = math.clamp(safeNum(STATE.InfJumpHeight), 28, 80)
-  STATE.AimLockStrength = 100
-  STATE.AimMouseAssist = true
-  STATE.AimMouseAssistStrength = math.max(80, safeNum(STATE.AimMouseAssistStrength))
+  STATE.AimLockStrength = math.clamp(safeNum(STATE.AimLockStrength), 1, 100)
+  STATE.AimMouseAssistStrength = math.clamp(safeNum(STATE.AimMouseAssistStrength), 5, 100)
   STATE.RageCPS = math.min(MAX_TRIGGER_CPS, math.max(1, safeNum(STATE.RageCPS)))
   STATE.TriggerCPS = math.min(MAX_TRIGGER_CPS, math.max(1, safeNum(STATE.TriggerCPS)))
   normalizeAllBinds()
@@ -1718,8 +1717,8 @@ function sendMouseDelta(dx, dy)
     y = y > 0 and 1 or -1
   end
   
-  x = math.floor(x + (x >= 0 and 0.5 or -0.5))
-  y = math.floor(y + (y >= 0 and 0.5 or -0.5))
+  x = x >= 0 and math.floor(x + 0.5) or math.ceil(x - 0.5)
+  y = y >= 0 and math.floor(y + 0.5) or math.ceil(y - 0.5)
   
   local function markInjected()
     injectedMouseDelta = Vector2.new(x, y)
@@ -2382,9 +2381,14 @@ function setupCombat()
           local targetPos = lockPart.Position
           pcall(function()
             local lockStrength = math.clamp(safeNum(STATE.AimLockStrength), 1, 100) / 100
-            local cf = Camera.CFrame
-            local want = CFrame.new(cf.Position, targetPos)
-            Camera.CFrame = lockStrength >= 0.99 and want or cf:Lerp(want, math.clamp(lockStrength * 0.9, 0.05, 0.95))
+            if STATE.AimMouseAssist and hasMouseAssistBackend() then
+              local smooth = math.clamp(9.5 - lockStrength * 8.4, 1.01, 9.5)
+              mouseAimStep(targetPos, smooth, "lock")
+            else
+              local cf = Camera.CFrame
+              local want = CFrame.new(cf.Position, targetPos)
+              Camera.CFrame = lockStrength >= 0.99 and want or cf:Lerp(want, math.clamp(lockStrength * 0.9, 0.05, 0.95))
+            end
           end)
         else
           aimTarget = nil
@@ -2570,15 +2574,18 @@ function setupCombat()
             autoAimBreakScore = math.max(0, autoAimBreakScore - 0.12)
           end
 
-          local useMouse = hasMouseAssistBackend()
+          local useMouse = STATE.AimMouseAssist and hasMouseAssistBackend()
           if useMouse then
             local smooth = math.clamp(13.5 - (adjustedStrength * 9.5) - ((autoAimSpeedFactor - 1) * 2.2), 1.15, 13.5)
             if modeStrength >= 100 then
               smooth = math.max(1.35, 2.0 - ((autoAimSpeedFactor - 1) * 0.35))
             end
             mouseAimStep(targetForAim, smooth, "auto", autoAimSpeedFactor)
-          else
-            return
+          elseif Camera and (targetForAim - Camera.CFrame.Position).Magnitude > 0.01 then
+            local cf = Camera.CFrame
+            local want = CFrame.lookAt(cf.Position, targetForAim, cf.UpVector)
+            local alpha = math.clamp(adjustedStrength * deltaTime * 8, 0, 1)
+            Camera.CFrame = cf:Lerp(want, alpha)
           end
           
         else
@@ -4239,7 +4246,6 @@ function enforceAlwaysOnChecks()
   STATE.TriggerRequireCenter = false
   STATE.TriggerVisibleCheck = true
   STATE.RageVisibilityCheck = false
-  STATE.AimMouseAssist = true
   STATE.FPSUnlocker = true
   STATE.InfJumpHeight = math.clamp(safeNum(STATE.InfJumpHeight), 28, 80)
 end
@@ -4533,19 +4539,18 @@ end
         CurrentValue = STATE.AimMouseAssist,
         Expanded = false,
         Callback = function(v)
-          STATE.AimMouseAssist = true
-          setToggleValue(c, true)
+          STATE.AimMouseAssist = v == true
         end,
       })
       or CT:CreateToggle({
         Name = "Mouse Aim Assist",
         CurrentValue = STATE.AimMouseAssist,
         Callback = function(v)
-          STATE.AimMouseAssist = true
-          setToggleValue(c, true)
+          STATE.AimMouseAssist = v == true
         end,
       })
     bindStateControl("AimMouseAssist", c)
+    c:CreateLabel("Maussteuerung fuer AimLock und Auto Aim; Zielmodus separat aktivieren.")
     bindStateControl(
       "AimMouseAssistSmooth",
       c:CreateSlider({

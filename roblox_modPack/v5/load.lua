@@ -2,7 +2,7 @@
 -- Paste this one file into an executor that supports loadstring & game:HttpGet.
 -- Modules are pinned to a specific immutable Git commit, not a mutable branch.
 -- No hidden payloads, account collection, remote telemetry or anti-debugging.
-local REV="cd8d4f5b1e01aa79f4e6b241e3d1a7b957f5b375"
+local REV="c2dd9a3a77c9b26f07f402f85eb98b9fcf3afae8"
 local ROOT="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/roblox_modPack/v5/"
 local function envTable()
     local e=_G
@@ -46,7 +46,12 @@ local ctx={
     Workspace=game:GetService("Workspace"),
     Lighting=game:GetService("Lighting"),
     RunService=R, UserInputService=game:GetService("UserInputService"),
-    Stats={},Options={Fire=true,Foliage=true,Scope=true,Optics=true},
+    Stats={},Options={
+        Fire=true,Foliage=true,Scope=true,Optics=true,Sound=true,
+        Storm=false,RainPercent=65,SnowPercent=50,
+        RainVolumePercent=55,RainVolume=.55,StylePercent=85,
+        StyleEnabled=true,Style="Realism",
+    },
     PhysicsHz=90,PhysicsActual=0,PhysicsSkipped=0,
     Revision=REV,
 }
@@ -88,7 +93,7 @@ end
 env.roblox_modPack_v5=ctx
 
 local loaded,errors={},{}
-for _,name in ipairs({"dist/body.lua","dist/surface.lua","dist/worldfx.lua","dist/optics.lua","dist/ui.lua"}) do
+for _,name in ipairs({"dist/body.lua","dist/surface.lua","dist/worldfx.lua","dist/optics.lua","dist/weatherfx.lua","dist/styles.lua","dist/ui.lua"}) do
     local successful,why=pcall(function()
         local factory=import(name)()
         if type(factory)~="function" then
@@ -106,6 +111,11 @@ for _,name in ipairs({"dist/body.lua","dist/surface.lua","dist/worldfx.lua","dis
         warn("[RM5] "..errors[#errors])
     end
 end
+
+-- Initialize the displayed rain intensity to match the UI.
+pcall(function()
+    if base.weatherMode=="RAIN" then base.SetWeatherIntensityFraction(ctx.Options.RainPercent/100) end
+end)
 
 local fixed=1/90
 local accumulator,count,measureSince=0,0,os.clock()
@@ -153,4 +163,4 @@ ctx.Report=function()
     for _,e in ipairs(errors) do warn(e) end
 end
 ctx.Report()
-print("[RM5] F10 UI | F7 rain/snow/off | F9 intensity | F8 power | F6 diagnostics")
+print("[RM5.2] F10 GUI | Snow rounded 3D mounds | rain splashes/audio | 14 looks | F7/F8/F9/F6")

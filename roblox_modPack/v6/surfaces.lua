@@ -11,6 +11,7 @@ return function(ctx)
     local totalFloors,totalWalls=0,0
     local rand=Random.new(6132)
     local timer=0
+    local previousWeather=nil
     local function r(a,b)return rand:NextNumber(a,b) end
     local function own(part,prop,value)
         local values=original[part]
@@ -135,7 +136,8 @@ return function(ctx)
         if not normal or normal.Y<.78 then return end
         local camera=W.CurrentCamera
         if not camera or (camera.CFrame.Position-pos).Magnitude>55 then return end
-        local k=key(pos),slot=cellMap[key(pos)]
+        local k=key(pos)
+        local slot=cellMap[k]
         if slot and slot.life>0 then
             slot.r=math.min(slot.r+.018,2.0)
             slot.life=math.max(slot.life,12)
@@ -158,6 +160,12 @@ return function(ctx)
     end
     local doRender=0
     ctx.AddStep(function(dt,render)
+        local mode=ctx.Base.weatherMode
+        if mode~=previousWeather then
+            previousWeather=mode
+            if next(original) then restoreAll() end
+            totalFloors=0;totalWalls=0
+        end
         timer+=dt
         doRender+=dt
         if timer>.68 then timer=0;scan() end

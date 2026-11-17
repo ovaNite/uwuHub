@@ -1,5 +1,5 @@
 -- NovaX v1.1 compile-only verification. Does not start gameplay modules.
-local REV="PIN_TO_BE_FILLED"
+local REV="3041e97117e3a3d9fb36d856d06f610f68bca755"
 local root="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/novax/v1.1/"
 local paths={"ui/NovaPremiumUI.lua","core/legacy.lua","modules/capabilities.lua",
   "modules/weather.lua","modules/gui_extensions.lua"}

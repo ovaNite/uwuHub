@@ -83,7 +83,7 @@ end)
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local SUPPORT = {
-  MetaHook = typeof(hookmetamethod) == "function" and typeof(newcclosure) == "function" and typeof(getnamecallmethod) == "function",
+  MetaHook = typeof(hookmetamethod) == "function" and typeof(newcclosure) == "function" and typeof(getnamecallmethod) == "function" and typeof(checkcaller) == "function",
   HookFunction = (hookfunction ~= nil),
   GetConnections = (getconnections ~= nil),
   Debug = (debug and debug.getupvalue ~= nil),
@@ -317,6 +317,7 @@ local STATE = {
   AimLockStrength = 100,
   SilentAim = false,
   SilentAimMode = "Snap",
+  SilentHookSupported = false,
   SilentVisibleCheck = true,
   SilentTargetPart = "Head",
   NoHookMode = "ULTRA",
@@ -3308,7 +3309,7 @@ local function silentAimInput()
     silentAimGate.enabled=silentAimGate.target~=nil
     return
   end
-  if STATE.SilentAimMode=="Snap" then
+  if STATE.SilentAimMode~="Hook (Internal)" then
     local target=getSilentAimTarget()
     local cam=workspace.CurrentCamera
     if cam and target then
@@ -4136,7 +4137,9 @@ featureUnavailable = function(name, reason)
   nxWarn("[NovaX] " .. tostring(name or "Feature") .. ": " .. tostring(reason or "nicht verfuegbar"))
 end
 function hasSilentHookSupport()
-  return SUPPORT.MetaHook and typeof(hookmetamethod) == "function"
+  local supported=SUPPORT.MetaHook and typeof(hookmetamethod) == "function"
+  STATE.SilentHookSupported=supported and true or false
+  return supported
 end
 function setControlFromState(control,value) if control then pcall(function() if control.Set then control:Set(value) elseif control.SetValue then control:SetValue(value) end end) end end
 function bindStateControl(key,control,sync) if not key or not control then return control end; stateControlRefs[key]=stateControlRefs[key] or {}; table.insert(stateControlRefs[key],{control=control,sync=sync}); return control end

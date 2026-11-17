@@ -52,7 +52,7 @@ local CONFIG = {
     WeatherHotkey = Enum.KeyCode.F7,
     WeatherIntensityHotkey = Enum.KeyCode.F9,
     RainDrops = 170,          -- 3D, gepoolt, nicht 2D-HUD
-    SnowFlakes = 154,
+    SnowFlakes = 215,
     MaxSplashParts = 44,
     MaxSettledSnow = 80,
     MaxImpactsPerStep = 8,
@@ -894,7 +894,11 @@ local function visibleSnowLanding(camera)
         local rayY=rand(.24,.96)*vp.Y
         local viewRay=camera:ViewportPointToRay(rayX,rayY)
         local hit=ray(viewRay.Origin,viewRay.Direction.Unit*170)
-        if isStationarySurface(hit) then return hit end
+        if isStationarySurface(hit) then
+            -- No falling snow in rooms with a roof above the landing spot.
+            local roofAbove=ray(hit.Position+Vector3.new(0,.3,0),Vector3.new(0,20,0))
+            if not roofAbove then return hit end
+        end
 
         -- If the view ray hits a vertical wall, look for the floor/roof that
         -- is actually visible beside it. Never place a snow patch without
@@ -912,7 +916,8 @@ local function visibleSnowLanding(camera)
                 local direction=probe.Position-camera.CFrame.Position
                 local sight=ray(camera.CFrame.Position,direction)
                 if sight and (sight.Position-probe.Position).Magnitude<2.1 then
-                    return probe
+                    local roofAbove=ray(probe.Position+Vector3.new(0,.3,0),Vector3.new(0,20,0))
+                    if not roofAbove then return probe end
                 end
             end
         end

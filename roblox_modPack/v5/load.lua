@@ -2,7 +2,7 @@
 -- Paste this one file into an executor that supports loadstring & game:HttpGet.
 -- Modules are pinned to a specific immutable Git commit, not a mutable branch.
 -- No hidden payloads, account collection, remote telemetry or anti-debugging.
-local REV="c52546d1115f91da5afda7116334ae4f351c4bb2"
+local REV="82dae812868850132778582ef1902ae51394faa8"
 local ROOT="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/roblox_modPack/v5/"
 local function envTable()
     local e=_G

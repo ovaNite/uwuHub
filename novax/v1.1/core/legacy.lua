@@ -320,6 +320,8 @@ local STATE = {
   SilentVisibleCheck = true,
   SilentTargetPart = "Head",
   SilentHitChance = 100,
+  SilentHookTargetPart = "Head",
+  SilentHookHitChance = 100,
   NoHookMode = "ULTRA",
   AutoAim = false,
   RageBot = false,
@@ -3219,8 +3221,8 @@ local silentHoldPartMode="Head"
 local silentTargetPart=nil
 local silentTargetRefresh=0
 
-local function resolveSilentPartMode()
-  local mode=tostring(STATE.SilentTargetPart or "Head")
+local function resolveSilentPartMode(requested)
+  local mode=tostring(requested or STATE.SilentTargetPart or "Head")
   if mode~="Random" then return mode end
   local choices={"Head","UpperTorso","LowerTorso","HumanoidRootPart"}
   return choices[silentAimRng:NextInteger(1,#choices)]
@@ -3388,8 +3390,8 @@ setupGrabber=function()
         return
       end
       hookHold=true
-      hookPartMode=resolveSilentPartMode()
-      local chance=math.clamp(math.floor(tonumber(STATE.SilentHitChance) or 100),0,100)
+      hookPartMode=resolveSilentPartMode(STATE.SilentHookTargetPart)
+      local chance=math.clamp(math.floor(tonumber(STATE.SilentHookHitChance) or 100),0,100)
       hookRollAccepted=chance>0 and (chance>=100 or silentAimRng:NextInteger(1,100)<=chance)
       local target=hookRollAccepted and getSilentAimTarget(hookPartMode) or nil
       silentAimGate.target=target
@@ -4808,7 +4810,25 @@ end
         end
       })
     )
-    c:CreateLabel("One chance roll per Mouse1 press; hold tracks without repeated input.")
+    c:CreateLabel("Snap: one chance roll per Mouse1 press.")
+    c:CreateLabel("Hook (Internal): separate hit part and chance.")
+    bindStateControl("SilentHookTargetPart", c:CreateDropdown({
+      Name = "Hook Hit Part",
+      Options = {"Head","UpperTorso","LowerTorso","HumanoidRootPart","Random"},
+      CurrentOption = {STATE.SilentHookTargetPart},
+      Callback = function(v)
+        STATE.SilentHookTargetPart=type(v)=="table" and v[1] or tostring(v)
+      end,
+    }), function(v,o) setControlFromState(o,tostring(v or "Head")) end)
+    bindStateControl("SilentHookHitChance", c:CreateSlider({
+      Name = "Hook Hitchance / Hold",
+      Range = {0,100}, Increment = 1,
+      CurrentValue = STATE.SilentHookHitChance,
+      Callback = function(v)
+        STATE.SilentHookHitChance=math.clamp(math.floor(tonumber(v) or 100),0,100)
+      end,
+    }))
+    c:CreateLabel("Hook chance is rolled once per Mouse1 press.")
   end
   
   local ET = Win:CreateTab("ESP", 4483345998)

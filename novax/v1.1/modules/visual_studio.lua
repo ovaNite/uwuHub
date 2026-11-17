@@ -41,7 +41,7 @@ return function(env)
   local assignedFov=nil
   local opts={enabled=false,bloom=false,saturation=0,contrast=0,clock=14,fov=70,clockEnabled=false,fovEnabled=false,
     rays=false,depth=false,brightnessEnabled=false,brightness=2,exposure=0,fogEnabled=false,fogEnd=1000,
-    ambientEnabled=false,ambient=128,shadowsEnabled=false,shadows=true,tint="Neutral"}
+    ambientEnabled=false,ambient=128,shadowsEnabled=false,shadows=true,tint="Neutral",performance=false}
   local tints={Neutral=Color3.fromRGB(255,255,255),Warm=Color3.fromRGB(255,225,195),
     Cool=Color3.fromRGB(200,225,255),Sunset=Color3.fromRGB(255,192,164),Mono=Color3.fromRGB(220,220,220)}
   local function camera()
@@ -61,8 +61,8 @@ return function(env)
     color.Saturation=opts.saturation
     color.Contrast=opts.contrast
     color.TintColor=tints[opts.tint] or tints.Neutral
-    bloom.Enabled=opts.bloom
-    rays.Enabled=opts.rays;depth.Enabled=opts.depth
+    bloom.Enabled=opts.bloom and not opts.performance
+    rays.Enabled=opts.rays and not opts.performance;depth.Enabled=opts.depth and not opts.performance
     override("Brightness",opts.brightnessEnabled,opts.brightness)
     override("ExposureCompensation",opts.brightnessEnabled,opts.exposure)
     override("FogStart",opts.fogEnabled,0)
@@ -70,7 +70,7 @@ return function(env)
     local grey=Color3.fromRGB(opts.ambient,opts.ambient,opts.ambient)
     override("Ambient",opts.ambientEnabled,grey)
     override("OutdoorAmbient",opts.ambientEnabled,grey)
-    override("GlobalShadows",opts.shadowsEnabled,opts.shadows)
+    override("GlobalShadows",opts.performance or opts.shadowsEnabled,not opts.performance and opts.shadows)
     if opts.clockEnabled then
       Lighting.ClockTime=opts.clock
       assignedClock=opts.clock
@@ -100,6 +100,8 @@ return function(env)
   tab:CreateToggle({Name="Depth of field",CurrentValue=false,Callback=function(v) opts.depth=v;apply() end})
   tab:CreateSlider({Name="Depth focus distance",Range={5,300},Increment=5,CurrentValue=50,Callback=function(v) depth.FocusDistance=math.clamp(tonumber(v) or 50,5,300) end})
   tab:CreateSlider({Name="Depth blur strength",Range={0,100},Increment=1,CurrentValue=15,Callback=function(v) depth.FarIntensity=math.clamp((tonumber(v) or 0)/100,0,1) end})
+  tab:CreateSection("Performance")
+  tab:CreateToggle({Name="Performance mode (shadows and blur off)",CurrentValue=false,Callback=function(v) opts.performance=v;apply() end})
   tab:CreateSection("World lighting")
   tab:CreateToggle({Name="Custom brightness and exposure",CurrentValue=false,Callback=function(v) opts.brightnessEnabled=v;apply() end})
   tab:CreateSlider({Name="Brightness",Range={0,10},Increment=0.1,CurrentValue=2,Callback=function(v) opts.brightness=math.clamp(tonumber(v) or 2,0,10);apply() end})
@@ -123,7 +125,7 @@ return function(env)
     cameraConnection:Disconnect()
     opts.clockEnabled=false
     opts.fovEnabled=false
-    opts.brightnessEnabled=false;opts.fogEnabled=false;opts.ambientEnabled=false;opts.shadowsEnabled=false
+    opts.brightnessEnabled=false;opts.fogEnabled=false;opts.ambientEnabled=false;opts.shadowsEnabled=false;opts.performance=false
     apply()
     color:Destroy()
     bloom:Destroy();rays:Destroy();depth:Destroy()

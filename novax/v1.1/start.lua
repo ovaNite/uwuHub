@@ -295,7 +295,120 @@ if not okControls then
   table.insert(env.NovaXRelease.Errors,"Weapon Controls: "..tostring(controlsError))
   warn("[NovaX] Weapon Controls: "..tostring(controlsError))
 end
+-- Local view-model appearance selector; does not alter weapon behaviour.
+local modelControls
+local okModels,modelError=pcall(function()
+  local ui=assert(env.NX_UI_WINDOW,"NovaX GUI not available")
+  local player=game:GetService("Players").LocalPlayer
+  local run=game:GetService("RunService")
+  local store=game:GetService("ReplicatedStorage")
+  local world=game:GetService("Workspace")
+  local cache,originals,links={},{},{}
+  local active,selected,shown,shownRig=true,"Original",nil,nil
+  local options,dropdown={"Original"},nil
+  local function clear()
+    if shown then shown:Destroy();shown=nil end
+    for part,old in pairs(originals) do pcall(function() part.LocalTransparencyModifier=old end) end
+    originals={};shownRig=nil
+  end
+  local function root()
+    local view=world:FindFirstChild("ViewModels")
+    return view and view:FindFirstChild("FirstPerson")
+  end
+  local function rig()
+    local r=root();if not r then return nil end
+    local prefix=player.Name.." - "
+    for _,v in ipairs(r:GetChildren()) do
+      if v:IsA("Model") and v.Name:sub(1,#prefix)==prefix and v:FindFirstChild("ItemVisual") then return v end
+    end
+    return nil
+  end
+  local function add(model)
+    if not model:IsA("Model") then return end
+    local prefix=player.Name.." - "
+    if model.Name:sub(1,#prefix)~=prefix then return end
+    local name=model.Name:sub(#prefix+1)
+    if cache[name] or #options>=129 then return end
+    local visual=model:FindFirstChild("ItemVisual")
+    local grip=model:FindFirstChild("RightItem")
+    if not visual or not visual:IsA("Model") or not grip or not grip:IsA("BasePart") then return end
+    if not visual:FindFirstChildWhichIsA("BasePart",true) then return end
+    local ok,copy,offset=pcall(function() return visual:Clone(),grip.CFrame:ToObjectSpace(visual:GetPivot()) end)
+    if not ok or not copy then return end
+    for _,v in ipairs(copy:GetDescendants()) do
+      if v:IsA("LuaSourceContainer") or v:IsA("Sound") or v:IsA("JointInstance") or v:IsA("Constraint") then
+        v:Destroy()
+      elseif v:IsA("BasePart") then
+        v.Anchored=true;v.CanCollide=false;v.CanTouch=false;v.CanQuery=false
+      end
+    end
+    cache[name]={visual=copy,offset=offset}
+    options[#options+1]=name
+    if dropdown and dropdown.Refresh then dropdown:Refresh(options) end
+  end
+  local function scan()
+    local activeRoot=root()
+    local assets=store:FindFirstChild("Assets")
+    local temp=assets and assets:FindFirstChild("Temp")
+    local parked=temp and temp:FindFirstChild("ViewModels")
+    for _,container in pairs({activeRoot,parked}) do
+      if container then for _,model in ipairs(container:GetChildren()) do add(model) end end
+    end
+  end
+  local function show(target)
+    clear()
+    local source=cache[selected]
+    if not source or not target then return end
+    local visual=target:FindFirstChild("ItemVisual")
+    local grip=target:FindFirstChild("RightItem")
+    if not visual or not grip or not grip:IsA("BasePart") then return end
+    local clone=source.visual:Clone()
+    if not clone then return end
+    clone.Name="NovaX_LocalModel"
+    clone.Parent=world.CurrentCamera or world
+    for _,part in ipairs(visual:GetDescendants()) do
+      if part:IsA("BasePart") then originals[part]=part.LocalTransparencyModifier;part.LocalTransparencyModifier=1 end
+    end
+    shown=clone;shownRig=target
+  end
+  local tab=ui:CreateTab("Weapon Models",4483345998)
+  tab:CreateSection("Local appearance")
+  tab:CreateLabel("Equip variants to add them. Appearance is visible only to you.")
+  dropdown=tab:CreateDropdown({Name="Model",Options=options,CurrentOption={"Original"},Callback=function(v)
+    selected=type(v)=="table" and tostring(v[1]) or tostring(v)
+    clear()
+  end})
+  tab:CreateButton({Name="Refresh loaded models",Callback=scan})
+  modelControls={Stop=function()
+    active=false
+    for _,c in ipairs(links) do c:Disconnect() end
+    clear()
+    for _,entry in pairs(cache) do entry.visual:Destroy() end
+    cache={}
+  end}
+  local lastScan=0
+  links[#links+1]=run.RenderStepped:Connect(function()
+    if not active then return end
+    local now=os.clock()
+    if now-lastScan>=1 then lastScan=now;scan() end
+    local target=rig()
+    if selected=="Original" then if shown then clear() end;return end
+    if target~=shownRig then show(target) end
+    if shown and target then
+      local grip=target:FindFirstChild("RightItem")
+      local source=cache[selected]
+      if grip and source then pcall(function() shown:PivotTo(grip.CFrame*source.offset) end) else clear() end
+    end
+  end)
+  scan()
+end)
+if not okModels then
+  if modelControls then pcall(modelControls.Stop);modelControls=nil end
+  table.insert(env.NovaXRelease.Errors,"Weapon Models: "..tostring(modelError))
+  warn("[NovaX] Weapon Models: "..tostring(modelError))
+end
 env.NX_CLEANUP=function()
+  if modelControls then pcall(modelControls.Stop) end
   if controlsModule then pcall(controlsModule.Stop) end
   if type(visualModule)=="table" and type(visualModule.Stop)=="function" then
     pcall(visualModule.Stop)

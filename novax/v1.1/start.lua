@@ -4,6 +4,7 @@
 -- 90Hz weather, compatibility checker and integrated Weather/Diagnostics tabs.
 local REV="2df577a270a78151c9afa2f7b7b9340e45a38f4d"
 local VISUAL_REV="47a44eee561bdc9d9cb52f04712d914d91bab74b"
+local DIAG_REV="b0f43810486b109211c0d4c6a2c0d3f5558210cf"
 local CORE_REV="c3a3edf7551ce39083a54aa7956c22f5cabf6b3e"
 local BASE="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/novax/v1/"
 local env=(getgenv and getgenv()) or _G
@@ -12,6 +13,9 @@ if type(loadstring)~="function" then
 end
 local function load(relative)
   local url = relative=="core/legacy.lua" and ("https://raw.githubusercontent.com/ovaNite/uwuHub/"..CORE_REV.."/novax/v1.1/core/legacy.lua") or relative=="modules/visual_studio.lua" and ("https://raw.githubusercontent.com/ovaNite/uwuHub/"..VISUAL_REV.."/novax/v1.1/modules/visual_studio.lua") or (BASE..relative)
+  if relative=="modules/weapon_diagnostics.lua" then
+    url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..DIAG_REV.."/novax/v1.1/modules/weapon_diagnostics.lua"
+  end
   local ok,result=pcall(function()return game:HttpGet(url,true)end)
   if not ok or type(result)~="string" or #result<100 then
     error("[NovaX] Cannot download "..relative..": "..tostring(result))
@@ -109,6 +113,14 @@ if type(visualFactory)=="function" then
   else
     table.insert(env.NovaXRelease.Errors,"Visual Studio: "..tostring(result))
     warn("[NovaX] Visual Studio: "..tostring(result))
+  end
+end
+local diagnosticsFactory=execute("modules/weapon_diagnostics.lua",false)
+if type(diagnosticsFactory)=="function" then
+  local ok,err=pcall(diagnosticsFactory,env)
+  if not ok then
+    table.insert(env.NovaXRelease.Errors,"Weapon Diagnostics: "..tostring(err))
+    warn("[NovaX] Weapon Diagnostics: "..tostring(err))
   end
 end
 env.NX_CLEANUP=function()

@@ -174,20 +174,20 @@ return function(ctx)
         local distanceFade=math.clamp(1-first.Distance/CONFIG.maxSurfaceDistance,.05,1)
         local nearFade=math.clamp(1-second.Distance/CONFIG.bounceDistance,.1,1)
         local wetPower=math.clamp(ctx.Options.ReflectionPower or .72,.05,1)
-        local strength=math.clamp((fresnel*.85+.11)*wetPower*
+        local strength=math.clamp((fresnel*.90+.27)*wetPower*
             (nearFade*.65+.35)*(distanceFade*.5+.5),.03,.70)
         -- A thin ellipse directly on the actual surface for proper 3D occlusion;
         -- its colour comes from the second hit, not a preselected blue shader.
         local sourceBoost=(material==Enum.Material.Neon and 1.25) or 1
         local floorTint=first.Instance:IsA("BasePart") and first.Instance.Color
             or Color3.fromRGB(45,49,54)
-        local sampled=floorTint:Lerp(color,math.clamp(strength*sourceBoost*1.65,0,1))
+        local sampled=floorTint:Lerp(color,math.clamp(strength*sourceBoost*2.1,0,1))
         local footprint=math.clamp(first.Distance/cols*.38,.16,.82)
         local aspect=1.65
         sample.mesh.Scale=Vector3.new(footprint*aspect,.012,footprint*.8)
         sample.part.Color=sampled
         sample.part.CFrame=basis(p+n*.025,n)
-        sample.part.Transparency=math.clamp(.91-strength*.86,.39,.93)
+        sample.part.Transparency=math.clamp(.80-strength*.72,.35,.87)
         sample.last=os.clock()
         sample.valid=true
     end
@@ -197,11 +197,13 @@ return function(ctx)
     ctx.Options.ReflectionRoughness=.014
     ctx.Stats.ReflectionQuality="BALANCED"
     local toast=nil
+    local toastTime=0
     local function message(t)
         print("[RM7] "..t)
         if toast and toast.Parent then
             toast.Text=t
             toast.Visible=true
+            toastTime=os.clock()
         end
     end
     local function newHud()
@@ -252,6 +254,7 @@ return function(ctx)
             and ctx.Options.ReflectionsRaycast~=false
             and ctx.Base.weatherMode=="RAIN"
         local cam=Workspace.CurrentCamera
+        if toast and toast.Visible and os.clock()-toastTime>2.2 then toast.Visible=false end
         if not enabledNow or not cam then
             if clock>-.1 then
                 reset()

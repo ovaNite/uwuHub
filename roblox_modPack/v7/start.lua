@@ -4,7 +4,7 @@
 -- TWO-RAY reflections on rain-wet floors (not native GPU RTX).
 local ROOT="https://raw.githubusercontent.com/ovaNite/uwuHub/"
 local REV_BASE="3ddf0f9b60e125f977ce1544ce331dae90d74006"
-local REV_TRACE="5b5d678f95cef10b32f18cd0e1fcf69cf7c45760"
+local REV_TRACE="8ac16aa34c2442d5363994b8b136c6bba1d043df"
 local function download(path)
     local ok,source=pcall(function()return game:HttpGet(path,true)end)
     if not ok or type(source)~="string" or #source<100 then

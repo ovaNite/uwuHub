@@ -18,8 +18,7 @@ return function(ctx)
     ctx.Track(screen)
     local accent=Color3.fromRGB(196,208,216)
     local theme={radius=14,windowOpacity=.06,accent=accent,key=Enum.KeyCode.F10}
-    local roundList={},{}
-    local rounds=roundList[1]
+    local rounds={}
     local function new(class,props,parent)
         local o=Instance.new(class)
         for key,value in pairs(props or {}) do o[key]=value end

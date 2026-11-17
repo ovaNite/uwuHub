@@ -1,188 +1,189 @@
--- roblox_modPack v5 / body.lua
--- Local character weather contact. Visual simulation only; never changes hitboxes.
+-- roblox_modPack v5.3 / body.lua
+-- First-person arms and equipped weapon ONLY. No torso/head/legs/world avatars.
+-- Small cosmetic beads obey local gravity; none are physics colliders.
 return function(ctx)
-    local Players, W, R = ctx.Players, ctx.Workspace, ctx.RunService
-    local rng = Random.new()
-    local pools, attached = {}, {}
-    local character, humanoid, root
-    local spawnClock, roofClock, gearClock = 0, 0, 0
-    local outside, surfaceHits = true, 0
-    local limit = 68
-
-    local function rand(a,b) return rng:NextNumber(a,b) end
-    local function hide(p)
-        p.Transparency = 1
-        p.CFrame = CFrame.new(0,-10000,0)
+    local Players,W=ctx.Players,ctx.Workspace
+    local player=Players.LocalPlayer
+    local rng=Random.new()
+    local function rnd(a,b)return rng:NextNumber(a,b)end
+    local contacts, pool = {}, {}
+    local tScan,tEmit=0,0
+    local impacts=0
+    local limit=40
+    local function lower(p) return string.lower(p.Name or "") end
+    local function allowedArm(p)
+        if not p:IsA("BasePart") then return false end
+        local n=lower(p):gsub("[ _%-]","")
+        return n=="lefthand" or n=="righthand"
+            or n=="leftarm" or n=="rightarm"
+            or n=="leftlowerarm" or n=="rightlowerarm"
+            or n=="leftupperarm" or n=="rightupperarm"
+            or n=="leftforearm" or n=="rightforearm"
     end
-    local function ray(a,d)
-        local params = RaycastParams.new()
-        params.FilterType = Enum.RaycastFilterType.Exclude
-        params.FilterDescendantsInstances = {ctx.Folder, character}
-        params.IgnoreWater = false
-        return W:Raycast(a,d,params)
+    local function isWeaponName(p)
+        local n=lower(p):gsub("[ _%-]","")
+        return n=="handle" or n=="barrel" or n=="scope" or n=="receiver"
+            or n=="magazine" or n=="weapon" or n=="gun" or n=="muzzle"
+            or n=="gunbody"
     end
-    local function newDot(i)
+    local function make()
         local p=Instance.new("Part")
-        p.Name="RM5_BodyDroplet_"..i; p.Anchored=true
+        p.Name="RM53_WeaponWater"
+        p.Shape=Enum.PartType.Ball;p.Anchored=true
         p.CanCollide=false;p.CanTouch=false;p.CanQuery=false;p.CastShadow=false
-        p.Shape=Enum.PartType.Ball;p.Material=Enum.Material.Glass
-        p.Color=Color3.fromRGB(183,199,208)
-        p.Reflectance=0.06;p.Size=Vector3.new(.065,.065,.065)
-        hide(p);p.Parent=ctx.Folder;ctx.Track(p)
-        return {p=p,life=0,mode="OFF",part=nil,pos=Vector3.zero,vel=Vector3.zero,alpha=0,scale=.06}
+        p.Material=Enum.Material.Glass
+        p.Color=Color3.fromRGB(190,205,215)
+        p.Reflectance=.06;p.Transparency=1
+        p.Size=Vector3.new(.02,.02,.02)
+        p.Parent=ctx.Folder;ctx.Track(p)
+        return {part=p,life=0,host=nil,localPos=Vector3.zero,
+            worldPos=Vector3.zero,vel=Vector3.zero,mode="OFF",size=.03,ttl=0}
     end
-    for i=1,limit do pools[i]=newDot(i) end
-
-    local function limbList(model)
-        local list={}
-        if not model then return list end
-        for _,name in ipairs({"LeftHand","RightHand","LeftLowerArm","RightLowerArm","LeftUpperArm","RightUpperArm","Left Arm","Right Arm","LeftFoot","RightFoot","Head","UpperTorso","Torso"}) do
-            local p=model:FindFirstChild(name)
-            if p and p:IsA("BasePart") then list[#list+1]=p end
+    for i=1,limit do pool[i]=make()end
+    local function retire(d)
+        d.life=0;d.host=nil;d.part.Transparency=1
+    end
+    local function visibleArmAndWeapon()
+        local cam=W.CurrentCamera
+        local char=player and player.Character
+        if not cam or not char then return {} end
+        local result,seen={},{}
+        local function add(p)
+            if not p or seen[p] or not p:IsA("BasePart")
+                or p.Transparency>.92 or p.LocalTransparencyModifier>.85 then return end
+            if (p.Position-cam.CFrame.Position).Magnitude>10 then return end
+            local v,onScreen=cam:WorldToViewportPoint(p.Position)
+            if not onScreen or v.Z<=0 then return end
+            seen[p]=true;result[#result+1]=p
         end
-        return list
+        -- True first-person viewmodel models parented to CurrentCamera.
+        for _,node in ipairs(cam:GetChildren()) do
+            local name=lower(node)
+            if node:IsA("Model") and
+                (name:find("view",1,true) or name:find("arm",1,true)
+                or name:find("weapon",1,true) or name:find("gun",1,true)) then
+                local count=0
+                for _,p in ipairs(node:GetDescendants()) do
+                    if allowedArm(p) or isWeaponName(p) then add(p) end
+                    count+=1
+                    if count>250 or #result>=14 then break end
+                end
+            elseif node:IsA("BasePart") and (allowedArm(node) or isWeaponName(node)) then
+                add(node)
+            end
+        end
+        -- Equipped tool only, never a weapon or character belonging to another player.
+        local tool=char:FindFirstChildOfClass("Tool")
+        if tool then
+            for _,p in ipairs(tool:GetDescendants()) do
+                if isWeaponName(p) then add(p) end
+                if #result>=16 then break end
+            end
+        end
+        -- Fallback: first-person arms. Never torso, face, hat, legs, other players.
+        local head=char:FindFirstChild("Head")
+        local firstPerson=head and (cam.CFrame.Position-head.Position).Magnitude<2.25
+        if firstPerson then
+            for _,p in ipairs(char:GetChildren()) do
+                if allowedArm(p) then add(p) end
+            end
+        end
+        return result
     end
-    local function refresh()
-        character=Players.LocalPlayer and Players.LocalPlayer.Character
-        humanoid=character and character:FindFirstChildOfClass("Humanoid")
-        root=character and (character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart)
-        attached=limbList(character)
-        for _,item in ipairs(pools) do item.life=0;hide(item.p) end
-    end
-    refresh()
-    if Players.LocalPlayer then ctx.Link(Players.LocalPlayer.CharacterAdded,function()
-        task.defer(refresh)
-    end) end
-
-    local function release(d)
-        d.part=nil;d.life=0;hide(d.p)
-    end
-    local function spawn(mode)
-        if #attached==0 then return end
+    local function emit(mode)
+        if #contacts==0 then return end
         local d
-        for _,item in ipairs(pools) do if item.life<=0 then d=item;break end end
+        for _,x in ipairs(pool) do
+            if x.life<=0 then d=x;break end
+        end
         if not d then return end
-        local part=attached[rng:NextInteger(1,#attached)]
-        if not part or not part.Parent then return end
-        local top=part.Size.Y*.42
-        local halfX=part.Size.X*.38
-        local halfZ=part.Size.Z*.38
-        d.pos=Vector3.new(rand(-halfX,halfX), top,rand(-halfZ,halfZ))
-        d.part=part;d.mode=mode;d.life=mode=="RAIN" and rand(.25,1.5) or rand(1.8,8.5)
-        d.alpha=0
+        local host=contacts[rng:NextInteger(1,#contacts)]
+        if not host or not host.Parent then return end
+        local s=host.Size
+        d.host=host
+        d.localPos=Vector3.new(rnd(-.36,.36)*s.X,.44*s.Y,rnd(-.36,.36)*s.Z)
         d.vel=Vector3.zero
-        d.scale=mode=="RAIN" and rand(.025,.075) or rand(.06,.14)
-        d.p.Material=mode=="RAIN" and Enum.Material.Glass or Enum.Material.Snow
-        d.p.Color=mode=="RAIN" and Color3.fromRGB(186,201,207) or Color3.fromRGB(230,235,238)
-        d.p.Reflectance=mode=="RAIN" and .10 or 0
-        d.p.Size=Vector3.new(d.scale,d.scale,d.scale)
-        d.p.Transparency=mode=="RAIN" and .18 or .07
-        d.p.CFrame=CFrame.new(part.CFrame:PointToWorldSpace(d.pos))
+        d.mode=mode
+        d.life=(mode=="RAIN") and rnd(.18,.60) or rnd(.55,1.5)
+        d.size=(mode=="RAIN") and rnd(.015,.034) or rnd(.026,.049)
+        d.part.Size=Vector3.new(d.size,d.size,d.size)
+        d.part.Material=(mode=="RAIN") and Enum.Material.Glass or Enum.Material.SmoothPlastic
+        d.part.Color=(mode=="RAIN") and Color3.fromRGB(185,201,213)
+            or Color3.fromRGB(242,245,248)
+        d.part.Transparency=(mode=="RAIN") and .48 or .32
+        d.part.CFrame=CFrame.new(host.CFrame:PointToWorldSpace(d.localPos))
     end
-    local function detach(d)
-        if d.mode=="SNOW" then release(d);return end
-        local limb=d.part
-        d.pos=limb.CFrame:PointToWorldSpace(d.pos)
-        d.part=nil
-        local motion=limb.AssemblyLinearVelocity
-        d.vel=motion*.5 + Vector3.new(rand(-2,2),rand(-4,-1),rand(-2,2))
-        d.life=.3
-    end
-
+    local rayParams=RaycastParams.new()
+    rayParams.FilterType=Enum.RaycastFilterType.Exclude
+    rayParams.IgnoreWater=false
     ctx.AddStep(function(dt,visual)
-        local base=ctx.Base
-        local mode=(base.enabled and base.weatherMode) or "OFF"
-        if mode=="OFF" or not character or not character.Parent then
-            for _,d in ipairs(pools) do if d.life>0 then release(d) end end
+        local mode=(ctx.Base.enabled and ctx.Base.weatherMode) or "OFF"
+        if mode=="OFF" then
+            for _,d in ipairs(pool) do
+                if d.life>0 then retire(d) end
+            end
+            ctx.Stats.BodyDrops=0
             return
         end
-        gearClock+=dt
-        if gearClock>.8 then
-            gearClock=0
-            attached=limbList(character)
-            local tool=character and character:FindFirstChildOfClass("Tool")
-            if tool then
-                local h=tool:FindFirstChild("Handle")
-                if h and h:IsA("BasePart") then attached[#attached+1]=h end
-            end
-            local camera=W.CurrentCamera
-            local vm=camera and (camera:FindFirstChild("Viewmodel") or camera:FindFirstChild("ViewModel"))
-            if vm then
-                for _,p in ipairs(vm:GetDescendants()) do
-                    if p:IsA("BasePart") and (p.Name=="Handle" or p.Name=="Scope"
-                        or p.Name=="Barrel" or p.Name=="Muzzle") then
-                        attached[#attached+1]=p
-                        if #attached>=20 then break end
-                    end
-                end
-            end
+        tScan+=dt;tEmit+=dt
+        if tScan>.40 then
+            tScan=0;contacts=visibleArmAndWeapon()
+            local char=player.Character
+            rayParams.FilterDescendantsInstances={ctx.Folder,char}
         end
-        roofClock+=dt
-        if roofClock>.45 and root then
-            roofClock=0
-            outside=ray(root.Position+Vector3.new(0,2.5,0),Vector3.new(0,75,0))==nil
+        local rate=mode=="RAIN" and 12 or 7
+        local strength=math.clamp(tonumber(ctx.Base.weatherIntensity) or .65,.01,1)
+        if tEmit>1/rate then
+            tEmit-=1/rate
+            if rng:NextNumber()<strength and #contacts>0 then emit(mode) end
         end
-        spawnClock+=dt
-        if outside and spawnClock>=.035 then
-            local count=math.min(4,math.floor(spawnClock/.035))
-            spawnClock-=(count*.035)
-            for _=1,count do
-                if rand(0,1)<(mode=="RAIN" and .65 or .38)*base.weatherIntensity then spawn(mode) end
-            end
-        end
-        local grav=W.Gravity
-        local speed=root and root.AssemblyLinearVelocity.Magnitude or 0
-        for _,d in ipairs(pools) do
+        local active=0
+        for _,d in ipairs(pool) do
             if d.life>0 then
                 d.life-=dt
-                if d.part and d.part.Parent then
-                    local limb=d.part
-                    if mode=="RAIN" then
-                        -- Gravitation in den lokalen Raum des bewegten Arms transformieren.
-                        local down=limb.CFrame:VectorToObjectSpace(Vector3.new(0,-1,0))
-                        d.vel+=down*grav*.035*dt
-                        d.vel=d.vel*(1-math.min(.9,dt*3.8))
-                        d.pos+=d.vel*dt
-                        local bounds=limb.Size*.52
-                        if math.abs(d.pos.X)>bounds.X or math.abs(d.pos.Y)>bounds.Y or math.abs(d.pos.Z)>bounds.Z or speed>43 then
-                            detach(d)
-                        end
-                    else
-                        -- Flocken bleiben laenger sitzen; kleine Aggregate statt Schneehuellen.
-                        d.scale=math.min(.20,d.scale+dt*.008)
-                        if speed>38 or mode~="SNOW" then detach(d) end
+                if d.host and d.host.Parent then
+                    local host=d.host
+                    local localG=host.CFrame:VectorToObjectSpace(Vector3.new(0,-1,0))
+                    d.vel=(d.vel+localG*(mode=="RAIN" and 24 or 1.8)*dt)
+                        *(1-math.min(.7,dt*2.8))
+                    d.localPos+=d.vel*dt
+                    local half=host.Size*.51
+                    local over=math.abs(d.localPos.X)>half.X
+                        or math.abs(d.localPos.Y)>half.Y
+                        or math.abs(d.localPos.Z)>half.Z
+                    local fast=host.AssemblyLinearVelocity.Magnitude>45
+                    if over or fast or d.life<=0 then
+                        d.worldPos=host.CFrame:PointToWorldSpace(d.localPos)
+                        d.vel=host.AssemblyLinearVelocity*.35
+                            +Vector3.new(rnd(-1,1),-rnd(1,3),rnd(-1,1))
+                        d.host=nil;d.life=math.max(.10,d.life)
+                    elseif visual then
+                        d.part.CFrame=CFrame.new(host.CFrame:PointToWorldSpace(d.localPos))
                     end
-                    if d.part and visual then
-                        d.p.Size=Vector3.new(d.scale,d.scale,d.scale)
-                        d.p.CFrame=CFrame.new(limb.CFrame:PointToWorldSpace(d.pos))
-                    end
-                elseif not d.part then
-                    local old=d.pos
-                    d.vel+=Vector3.new(0,-grav,0)*dt
-                    d.pos+=d.vel*dt
-                    -- Gesweepter Kontakt: kein Durchtunneln bei schnellen Tropfen.
-                    local hit=ray(old,d.pos-old)
+                else
+                    local previous=d.worldPos
+                    d.vel+=Vector3.new(0,-W.Gravity,0)*dt
+                    d.worldPos+=d.vel*dt
+                    local hit=W:Raycast(previous,d.worldPos-previous,rayParams)
                     if hit then
-                        surfaceHits+=1
+                        impacts+=1
                         if type(ctx.OnBodyWaterHit)=="function" then
                             pcall(ctx.OnBodyWaterHit,hit.Position,hit.Normal)
                         end
-                        release(d)
-                    elseif visual then d.p.CFrame=CFrame.new(d.pos) end
-                else
-                    release(d)
+                        retire(d)
+                    elseif visual then
+                        d.part.CFrame=CFrame.new(d.worldPos)
+                        d.part.Transparency=math.min(.95,d.part.Transparency+dt*1.6)
+                    end
                 end
-                if d.life<=0 then release(d) end
+                if d.life<=0 then retire(d) else active+=1 end
             end
         end
-        ctx.Stats.BodyImpacts=surfaceHits
-        ctx.Stats.BodyDrops=(function()
-            local n=0
-            for _,d in ipairs(pools) do if d.life>0 then n+=1 end end
-            return n
-        end)()
+        ctx.Stats.BodyDrops=active
+        ctx.Stats.BodyImpacts=impacts
+        ctx.Stats.WetSurfaces=#contacts
     end)
-    return {Name="Body contact",Stop=function()
-        for _,d in ipairs(pools) do release(d) end
+    return {Name="First-person arms and weapon only", Stop=function()
+        for _,d in ipairs(pool) do retire(d) end
     end}
 end

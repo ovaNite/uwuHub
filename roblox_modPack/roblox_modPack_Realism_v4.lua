@@ -1,5 +1,5 @@
 --[[
-  roblox_modPack | REALISM v4.0 (LOCAL + COMPUTED WEATHER PHYSICS)
+  roblox_modPack | REALISM v4.1 (90 HZ FIXED-STEP LOCAL WEATHER PHYSICS)
   Originales, neutrales Profil: kein Neon, keine fremden Assets, keine Remote-Requests.
 
   ECHTE AENDERUNGEN (wenn der Client sie erlaubt):
@@ -57,6 +57,9 @@ local CONFIG = {
     MaxSettledSnow = 80,
     MaxImpactsPerStep = 6,
     SnowAccumulation = true, -- lokale Schnee-Zellen
+    PhysicsHz = 90,          -- feste Simulationsschritte pro Realzeitsekunde
+    MaxPhysicsSubsteps = 6, -- bis 6 Nachholschritte pro Renderframe
+    MaxFrameDelta = 0.10,   -- FPS-Einbrueche begrenzen
 }
 
 local environment = _G
@@ -534,6 +537,8 @@ local weather = {
     stepTime = 0, indoorTime = 1, surfaceTime = 0, cloudTime = 0,
     indoor = false, hits = 0, roofs = 0, totalSpawned = 0, impactIndex = 0,
     cellCursor = 0, flowCursor = 0, elapsed = 0, avgFps = 60,
+    simStepCount = 0, simWindowStart = 0, simMeasuredHz = 0,
+    droppedPhysicsTime = 0, maxSubstepsSeen = 0,
     waterTransferred = 0, snowMelt = 0, failedSpawns = 0, raycasts = 0,
 }
 state.weatherMode = "RAIN"
@@ -546,6 +551,9 @@ state.weatherSnowCells = 0
 state.weatherRunoff = 0
 state.weatherMelt = 0
 state.weatherSimulation = "lokale Partikel + Oberflaechenmodell"
+state.weatherPhysicsHz = CONFIG.PhysicsHz
+state.weatherPhysicsMeasuredHz = 0
+state.weatherDroppedPhysicsTime = 0
 
 local rng = Random.new()
 local function rand(a, b) return rng:NextNumber(a, b) end
@@ -751,6 +759,13 @@ local function buildWeather()
     weather.waterTransferred = 0
     weather.snowMelt = 0
     weather.stepTime = 0
+    weather.simStepCount = 0
+    weather.simWindowStart = 0
+    weather.simMeasuredHz = 0
+    weather.droppedPhysicsTime = 0
+    weather.maxSubstepsSeen = 0
+    state.weatherPhysicsMeasuredHz = 0
+    state.weatherDroppedPhysicsTime = 0
     local snow = weather.mode == "SNOW"
     local count = math.clamp(math.floor((snow and CONFIG.SnowFlakes or CONFIG.RainDrops)
         * state.weatherIntensity), 45, 240)
@@ -938,7 +953,7 @@ local function surfaceStep(dt)
     state.weatherRunoff = weather.waterTransferred
     state.weatherMelt = weather.snowMelt
 end
-local function weatherStep(dt)
+local function weatherStep(dt, drawVisuals)
     if not weather.folder or not weather.rayParams or not state.enabled then return end
     local camera = Workspace.CurrentCamera
     if not camera then return end
@@ -1015,13 +1030,16 @@ local function weatherStep(dt)
                     drop.cooldown = rand(.02, .22)
                     hidePart(drop.part)
                 else
-                    if snow then
-                        drop.part.CFrame = CFrame.new(nextPos)
-                    else
-                        drop.part.CFrame = CFrame.lookAt(nextPos, nextPos + v)
-                            * CFrame.Angles(math.pi/2, 0, 0)
+                    -- Physik mit 90 Hz; das sichtbare Mesh nur einmal pro Renderframe bewegen.
+                    if drawVisuals then
+                        if snow then
+                            drop.part.CFrame = CFrame.new(nextPos)
+                        else
+                            drop.part.CFrame = CFrame.lookAt(nextPos, nextPos + v)
+                                * CFrame.Angles(math.pi/2, 0, 0)
+                        end
+                        drop.part.Transparency = math.clamp(drop.alpha + (delta.Magnitude < 3 and .15 or 0), 0, 1)
                     end
-                    drop.part.Transparency = math.clamp(drop.alpha + (delta.Magnitude < 3 and .15 or 0), 0, 1)
                     visible += 1
                 end
             end
@@ -1037,7 +1055,7 @@ local function weatherStep(dt)
             if collision then imp.ttl = 0 else imp.pos = newPos; imp.ttl -= dt end
             if imp.ttl <= 0 then
                 hidePart(imp.part)
-            else
+            elseif drawVisuals then
                 imp.part.CFrame = CFrame.new(newPos)
                 imp.part.Transparency = math.clamp(1 - .70 * (imp.ttl / imp.maxLife), 0, 1)
             end
@@ -1049,15 +1067,43 @@ local function weatherStep(dt)
         surfaceStep(amount)
     end
 end
+-- Die Heartbeat-Frequenz des Hosts bleibt variabel (z.B. 60 FPS).
+-- Der Akkumulator fuehrt dafuer im Mittel 90 feste Physikschritte/s aus.
+-- Die Darstellung wird zur FPS-Schonung nur beim letzten Schritt aktualisiert.
+local FIXED_PHYSICS_DT = 1 / CONFIG.PhysicsHz
 connections[#connections + 1] = RunService.Heartbeat:Connect(function(dt)
     if not state.running or not state.enabled or not weather.folder then return end
-    local elapsed = math.min(dt, .09)
-    weather.avgFps = weather.avgFps * .94 + (1 / math.max(elapsed, .001)) * .06
-    weather.stepTime += elapsed
-    if weather.stepTime < 1/30 then return end
-    local step = math.min(weather.stepTime, .065)
-    weather.stepTime = 0
-    weatherStep(step)
+    local frameDt = math.clamp(dt, 0, CONFIG.MaxFrameDelta)
+    weather.avgFps = weather.avgFps * .94 + (1 / math.max(dt, .001)) * .06
+    weather.stepTime += frameDt
+    local steps = math.min(
+        math.floor((weather.stepTime + 1e-9) / FIXED_PHYSICS_DT),
+        CONFIG.MaxPhysicsSubsteps
+    )
+    if steps < 1 then return end
+
+    weather.stepTime -= steps * FIXED_PHYSICS_DT
+    if weather.stepTime >= FIXED_PHYSICS_DT then
+        -- Bei extremem Lag keinen unendlichen Rueckstau aufbauen.
+        local skipped = math.floor(weather.stepTime / FIXED_PHYSICS_DT) * FIXED_PHYSICS_DT
+        weather.droppedPhysicsTime += skipped
+        weather.stepTime -= skipped
+    end
+    weather.maxSubstepsSeen = math.max(weather.maxSubstepsSeen, steps)
+    for substep = 1, steps do
+        weatherStep(FIXED_PHYSICS_DT, substep == steps)
+    end
+    weather.simStepCount += steps
+    local now = os.clock()
+    if weather.simWindowStart == 0 then weather.simWindowStart = now end
+    local duration = now - weather.simWindowStart
+    if duration >= 1 then
+        weather.simMeasuredHz = weather.simStepCount / duration
+        state.weatherPhysicsMeasuredHz = weather.simMeasuredHz
+        state.weatherDroppedPhysicsTime = weather.droppedPhysicsTime
+        weather.simStepCount = 0
+        weather.simWindowStart = now
+    end
 end)
 
 local function restore()
@@ -1092,6 +1138,10 @@ local function report()
     local out = {
         "roblox_modPack REALISM v4 | " .. (state.enabled and "AN" or "AUS"),
         "LightingStyle: " .. state.lightingStyle,
+        string.format("Wetter-Physik: Ziel %d Hz | gemessen %.1f Hz | max %d Substeps",
+            CONFIG.PhysicsHz, state.weatherPhysicsMeasuredHz, weather.maxSubstepsSeen),
+        string.format("Verworfene Nachholzeit: %.3f s (nur bei starkem Lag)",
+            state.weatherDroppedPhysicsTime),
         string.format("Wetter: %s | Intensitaet %.1fx | innen: %s", state.weatherMode, state.weatherIntensity, tostring(state.weatherIndoor)),
         string.format("Simulierte 3D-Tropfen/Flocken: %d | Einschlaege: %d | Dachsperren: %d", state.weatherLiveParticles, state.weatherImpacts, weather.roofs),
         string.format("Oberflaechen: %d Pfuetzenzellen | %d Schneezellen", state.weatherWetCells, state.weatherSnowCells),
@@ -1292,4 +1342,4 @@ end)
 
 setEnabled(true)
 state.PrintReport()
-print("[RM v4] F8 an/aus | F6 Bericht | F7 Regen/Schnee/Aus | F9 Wetterstaerke. Clientseitige Simulation; keine Serverfluide.")
+print("[RM v4.1] 90 Hz fixed-step Physik | F8 an/aus | F6 Bericht | F7 Regen/Schnee/Aus | F9 Wetterstaerke. Darstellung folgt Client-FPS; keine Serverfluide.")

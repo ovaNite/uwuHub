@@ -94,7 +94,7 @@ return function(ctx)
             not object.Anchored or object.Transparency>.42) then return end
         -- Cap expensive new cells and decouple visual density from physics events.
         impacts+=1
-        local chance=isSnow and .87 or .54
+        local chance=isSnow and .70 or .54
         if random(0,1)>chance then return end
         local c=startCell(position,normal)
         if not c then return end
@@ -146,20 +146,20 @@ return function(ctx)
             for _,l in ipairs(c.lumps) do l.part.Transparency=1 end
         else
             local growth=math.clamp(mass/2.8,0,1.25)
-            local broad=.25+math.sqrt(mass)*.45
+            local broad=.17+math.sqrt(mass)*.17
             -- Four overlapping smooth, differently tilted ellipsoids form one mound.
             -- There are no rectangular edges or flat snow planes.
             for index,l in ipairs(c.lumps) do
                 local share=(index==1 and 1 or index==2 and .80 or index==3 and .60 or .43)
-                local width=(broad+.20)*l.radius*c.width*share
-                local depth=(broad+.12)*l.depth*c.width*share
-                local height=(.05+growth*.54)*l.height*share
+                local width=(broad+.16)*l.radius*c.width*share
+                local depth=(broad+.11)*l.depth*c.width*share
+                local height=(.012+math.sqrt(mass)*.10)*l.height*share
                 local dx=l.offset.X*broad+c.windDrift.X*share
                 local dz=l.offset.Y*broad+c.windDrift.Y*share
                 l.mesh.Scale=Vector3.new(width*2,height*2,depth*2)
-                l.part.CFrame=basis*CFrame.new(dx,height*.54,dz)
+                l.part.CFrame=basis*CFrame.new(dx,height*.07,dz)
                     * CFrame.Angles(0,l.rotation,.02*math.sin(c.seed+index))
-                l.part.Transparency=math.clamp(.64-mass*.21,.04,.64)
+                l.part.Transparency=math.clamp(.70-mass*.12,.25,.70)
             end
         end
     end

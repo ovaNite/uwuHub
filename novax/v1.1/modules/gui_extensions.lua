@@ -79,7 +79,7 @@ return function(env)
   if audit then
     diag:CreateParagraph({Title="Runtime capabilities",Content=audit.Summary()})
     local list={
-      {"Hook metamethod","hookmetamethod"},
+      {"Hook API (not used by Snap)","hookmetamethod"},
       {"New C closure","newcclosure"},
       {"Namecall method","getnamecallmethod"},
       {"Mouse movement","mousemoverel"},

@@ -83,7 +83,7 @@ end)
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local SUPPORT = {
-  MetaHook = (getrawmetatable and setreadonly and newcclosure and getnamecallmethod) ~= nil,
+  MetaHook = typeof(hookmetamethod) == "function" and typeof(newcclosure) == "function" and typeof(getnamecallmethod) == "function",
   HookFunction = (hookfunction ~= nil),
   GetConnections = (getconnections ~= nil),
   Debug = (debug and debug.getupvalue ~= nil),
@@ -126,7 +126,7 @@ function notify(title, msg, dur)
 end
 
 local lastLeftClickAt, lastRightClickAt = 0, 0
-local MAX_TRIGGER_CPS = 500
+local MAX_TRIGGER_CPS = 30 -- guard against 500 Hz input spam
 local MIN_SHOT_INTERVAL = 1 / MAX_TRIGGER_CPS
 local MIN_RIGHT_CLICK_INTERVAL = 0.25
 
@@ -253,6 +253,7 @@ cleanup = function()
     lastControlSpoofAt = 0
     antiVoidNextAt = 0
   end)
+  if silentAimGate then silentAimGate.enabled=false; silentAimGate.target=nil end
   pcall(cleanAllESP)
   pcall(clearAimTargetHighlight)
   pcall(restoreDeviceSpoof)
@@ -310,7 +311,9 @@ local STATE = {
   AimLockPart = "Head",
   AimLockStrength = 100,
   SilentAim = false,
-  SilentAimMode = "No Hook",
+  SilentAimMode = "Snap",
+  SilentVisibleCheck = true,
+  SilentTargetPart = "Head",
   NoHookMode = "ULTRA",
   AutoAim = false,
   RageBot = false,
@@ -3200,99 +3203,135 @@ setFPSBoost = function(enabled)
   end)
 end
 
-local silentAimShotBusy = false
-
+-- NovaX revised two-mode silent aim:
+-- "Snap" turns the visible camera toward a target during a manual shot.
+-- "Hook (Internal)" only modifies eligible CLIENT Workspace:Raycast namecalls
+-- from the active firing window. This is executor-specific and cannot force
+-- server-authoritative hit registration or arbitrary weapon RemoteEvent logic.
+local silentHookTarget=nil
+local silentHookHeartbeat=0
+local silentHookNextRefresh=0
+local silentAimGate
 local function getSilentAimTarget()
-  local myRoot = getRoot()
-  if not myRoot then
-    return nil
-  end
-
-  local bestTarget, bestDistance = nil, huge
-  for _, player in ipairs(Players:GetPlayers()) do
-    if player ~= LocalPlayer and isAlive(player) and isEnemy(player, STATE.AimTeamCheck) then
-      local targetPart = getPreferredPartFromPlayer(player, "Head") or getPlayerRoot(player)
-      if targetPart then
-        local distance = (myRoot.Position - targetPart.Position).Magnitude
-        if distance < bestDistance then
-          bestTarget, bestDistance = targetPart, distance
+  local cam=workspace.CurrentCamera
+  if not cam then return nil end
+  local center=cam.ViewportSize*.5
+  local best=nil
+  local bestMetric=math.huge
+  local maxFOV=math.clamp(tonumber(STATE.AimFOV) or 150,20,500)
+  local maxRange=math.clamp(tonumber(STATE.AimMaxDist) or 300,20,1000)
+  for _,candidate in ipairs(Players:GetPlayers()) do
+    if candidate~=LocalPlayer and isAlive(candidate) and isEnemy(candidate,STATE.AimTeamCheck) then
+      local part=getPreferredPartFromPlayer(candidate,STATE.SilentTargetPart or "Head")
+        or getPlayerRoot(candidate)
+      if part and part:IsA("BasePart") and part.Parent then
+        local delta=part.Position-cam.CFrame.Position
+        local distance=delta.Magnitude
+        if distance>0 and distance<=maxRange then
+          local screen,visible=cam:WorldToViewportPoint(part.Position)
+          if visible and screen.Z>0 then
+            local pixel=(Vector2.new(screen.X,screen.Y)-Vector2.new(center.X,center.Y)).Magnitude
+            if pixel<=maxFOV and (not STATE.SilentVisibleCheck or isVisible(part)) then
+              local metric=pixel+distance*.003
+              if metric<bestMetric then best,bestMetric=part,metric end
+            end
+          end
         end
       end
     end
   end
-
-  return bestTarget
+  return best
 end
-
-local function fireSilentAimTool()
-  local fired = false
-  local tool = getTool()
-  if tool then
-    local activateRemote = tool:FindFirstChild("Activate")
-    if activateRemote then
-      local ok = pcall(function()
-        activateRemote:FireServer()
-      end)
-      fired = fired or ok
-    end
-
-    local remote = tool:FindFirstChild("RemoteEvent")
-    if remote then
-      local ok = pcall(function()
-        remote:FireServer()
-      end)
-      fired = fired or ok
-    end
-
-    if not fired then
-      local ok = pcall(function()
-        tool:Activate()
-      end)
-      fired = fired or ok
-    end
+local function installInternalRayHook()
+  if not hasSilentHookSupport() then return false end
+  local env=(getgenv and getgenv()) or _G
+  if type(env.NX_INTERNAL_RAY_HOOK)=="table" and env.NX_INTERNAL_RAY_HOOK.installed then
+    silentAimGate=env.NX_INTERNAL_RAY_HOOK
+    return true
   end
-
-  if not fired then
-    fired = click(MIN_SHOT_INTERVAL)
-  end
-
-  return fired
-end
-
-local function silentAimShot()
-  if silentAimShotBusy or not STATE.SilentAim then
+  local gate={installed=false,enabled=false,untilTime=0,target=nil}
+  local original
+  local hookOK,hookError=pcall(function()
+    original=hookmetamethod(game,"__namecall",newcclosure(function(self,...)
+      local method=getnamecallmethod()
+      if method~="Raycast" or self~=workspace or not gate.enabled
+        or os.clock()>gate.untilTime then
+        return original(self,...)
+      end
+      if type(checkcaller)=="function" then
+        local okCheck,localCall=pcall(checkcaller)
+        if okCheck and localCall then return original(self,...) end
+      end
+      local args={...}
+      local origin,direction=args[1],args[2]
+      local target=gate.target
+      if typeof(origin)~="Vector3" or typeof(direction)~="Vector3"
+        or not target or not target.Parent or direction.Magnitude<12 then
+        return original(self,...)
+      end
+      local cam=workspace.CurrentCamera
+      if not cam or (origin-cam.CFrame.Position).Magnitude>12 then
+        return original(self,...)
+      end
+      local toward=target.Position-origin
+      if toward.Magnitude<.5 then return original(self,...) end
+      args[2]=toward.Unit*direction.Magnitude
+      return original(self,table.unpack(args))
+    end))
+  end)
+  if not hookOK then
+    nxWarn("[NovaX] Internal hook could not be installed: "..tostring(hookError))
     return false
   end
-
-  local target = getSilentAimTarget()
-  if not target or not target.Parent or not Camera then
-    return false
-  end
-
-  silentAimShotBusy = true
-  local oldCF = Camera.CFrame
-  local ok = pcall(function()
-    Camera.CFrame = CFrame.new(oldCF.Position, target.Position)
-    task.wait(0.005)
-    fireSilentAimTool()
-    task.wait(0.005)
-  end)
-  pcall(function()
-    if Camera then
-      Camera.CFrame = oldCF
-    end
-  end)
-  silentAimShotBusy = false
-  return ok
+  gate.installed=true
+  env.NX_INTERNAL_RAY_HOOK=gate
+  silentAimGate=gate
+  return true
 end
-
-setupGrabber = function()
-  addConnection("silent_aim_click", UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then
+local function silentAimInput()
+  if not RUNNING or not STATE.SilentAim then return end
+  if STATE.SilentAimMode=="Hook (Internal)" then
+    if not silentAimGate or not silentAimGate.installed then
+      if not installInternalRayHook() then
+        featureUnavailable("Internal Silent Aim",
+          "hookmetamethod/newcclosure/getnamecallmethod unavailable; switch to Snap")
+        return
+      end
+    end
+    silentAimGate.target=getSilentAimTarget()
+    silentAimGate.untilTime=os.clock()+.20
+    silentAimGate.enabled=silentAimGate.target~=nil
+    return
+  end
+  if STATE.SilentAimMode=="Snap" then
+    local target=getSilentAimTarget()
+    local cam=workspace.CurrentCamera
+    if cam and target then
+      -- User-visible camera snap. Weapon firing is left to the real game,
+      -- avoiding the original unwanted RemoteEvent:FireServer() calls.
+      cam.CFrame=CFrame.lookAt(cam.CFrame.Position,target.Position)
+    end
+  end
+end
+setupGrabber=function()
+  if hasSilentHookSupport() then installInternalRayHook() end
+  addConnection("silent_aim_click",UserInputService.InputBegan:Connect(function(input,processed)
+    if processed then return end
+    if input.UserInputType==Enum.UserInputType.MouseButton1 then
+      silentAimInput()
+    end
+  end))
+  addConnection("silent_aim_cache",RunService.Heartbeat:Connect(function(dt)
+    if not RUNNING or not STATE.SilentAim
+      or STATE.SilentAimMode~="Hook (Internal)" then
+      if silentAimGate then silentAimGate.enabled=false end
       return
     end
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-      silentAimShot()
+    silentHookHeartbeat+=dt
+    if silentHookHeartbeat>=.085 then
+      silentHookHeartbeat=0
+      silentHookTarget=getSilentAimTarget()
+      if silentAimGate then silentAimGate.target=silentHookTarget end
     end
   end))
   return true
@@ -4218,8 +4257,8 @@ function NX_BootGUI()
         Name = "NovaX",
         Title = "NovaX",
         LoadingTitle = "NovaX",
-        LoadingSubtitle = "Xeno",
-        Subtitle = "Xeno control panel",
+        LoadingSubtitle = "Klaus (Dev)  |  Nexus (Bug Fixer)",
+        Subtitle = "Klaus (Dev)  |  Nexus (Bug Fixer)",
         LogoImage = {
           "NovaX_Logo.png",
           "C:/Users/User/Downloads/NovaX Logo.png",
@@ -4268,6 +4307,11 @@ if not GUI_READY then
 end
 
   local CT = Win:CreateTab("Combat", 4483345998)
+  local creditsTab=Win:CreateTab("Credits",4483345998)
+  creditsTab:CreateSection("NovaX Development")
+  creditsTab:CreateLabel("Klaus (Dev)")
+  creditsTab:CreateLabel("Nexus (Bug Fixer)")
+  creditsTab:CreateLabel("Hook availability is executor-dependent.")
   CT:CreateSection("AimLock")
   
   do
@@ -4643,16 +4687,21 @@ end
       "SilentAimMode",
       c:CreateDropdown({
         Name = "Mode",
-        Options = {"No Hook"},
+        Options = {"Snap", "Hook (Internal)"},
         CurrentOption = {STATE.SilentAimMode},
-        Callback = function()
-          STATE.SilentAimMode = "No Hook"
-          enforceNoHookMode()
+        Callback = function(v)
+          local selected = type(v)=="table" and v[1] or tostring(v)
+          if selected=="Hook (Internal)" and not hasSilentHookSupport() then
+            featureUnavailable("Silent Aim Hook", "Executor does not expose the required hook functions")
+            selected="Snap"
+          end
+          STATE.SilentAimMode=selected
+          if silentAimGate then silentAimGate.enabled=false end
           syncStateControlsFromState()
-        end,
+        end
       }),
       function(v, o)
-        setControlFromState(o, "No Hook")
+        setControlFromState(o,tostring(v or "Snap"))
       end
     )
   end
@@ -5198,16 +5247,8 @@ scheduleLoad("utility.backstab", 0.28, setupAutoBackstab)
 scheduleLoad("visual.esp", 0.34, setupESP)
 scheduleLoad("movement", 0.40, setupMovement)
 scheduleLoad("movement.infjump", 0.44, setupInfJump)
-scheduleLoad("silent.hook", 0.58, function()
-  if tostring(STATE.SilentAimMode or "No Hook") == "No Hook" then
-    safeHook(setupGrabber, "Silent Aim No Hook")
-    return
-  end
-  if hasSilentHookSupport() then
-    safeHook(setupGrabber, "Silent Aim Hook")
-  else
-    featureUnavailable("Silent Aim Hook", "hookmetamethod/newcclosure/getnamecallmethod fehlen in diesem Executor; Toggle bleibt trotzdem unveraendert.")
-  end
+scheduleLoad("aim.silent",0.46,function()
+  safeHook(setupGrabber,"Silent Aim Snap/Internal Hook")
 end)
 
 notify("NovaX", "Loaded Successfully!", 3)

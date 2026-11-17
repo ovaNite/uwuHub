@@ -17,7 +17,7 @@ Developers: **Klaus (Dev)** and **Nexus (Bug Fixer)**.
 
 Hitchance means chance to activate camera assistance for one physical hold. It is not a guarantee of server-side projectile hits. Snap changes the local camera; it is not silent server-side shot redirection.
 
-The previous internal hook option was removed from this release. A generic client hook cannot promise all weapon systems or all games will register a hit.
+The previous internal hook option was removed from this release. A generic client hook cannot promise all weapon systems or all games will register a hit. Snap itself does not need hook APIs, but the remote loader still requires an executor that provides loadstring and game:HttpGet; therefore compatibility with every executor is not guaranteed.
 
 ## Original features
 The supplied original Premium UI library and main feature core are preserved as separate modules. Existing aim, ESP, trigger, movement, configuration and other original controls remain; individual features still require experience/executor testing.

@@ -377,7 +377,30 @@ return function(ctx)
         local cam=W.CurrentCamera
         if not cam then return end
         local mode=ctx.Base.enabled and ctx.Base.weatherMode or "OFF"
-        if mode~="SNOW" then
+        if mode~="SNOW" or ctx.Options.SnowParticles==false then
+            -- Snow persists across weather changes. Rain speeds its gradual
+            -- melting; thick snow piles resist melting for longer.
+            if visual and drawClock>.04 then
+                local elapsed=drawClock
+                drawClock=0
+                local remain=0
+                local sun=math.clamp(math.sin((L.ClockTime-6)*math.pi/12),0,1)
+                for _,c in ipairs(cellList) do
+                    if c.active then
+                        local rate=((mode=="RAIN" and .0014 or .00013)
+                            +sun*.00008)/(1+c.mass*4.5)
+                        c.mass=math.max(0,c.mass-rate*elapsed)
+                        if c.mass<.002 then
+                            hideCell(c)
+                            cells[c.key]=nil;c.key=""
+                        else
+                            drawCell(c)
+                            remain+=1
+                        end
+                    end
+                end
+                ctx.Stats.SnowCells=remain
+            end
             if activeCount>0 then
                 for _,flake in ipairs(near) do conceal(flake) end
                 activeCount=0
@@ -419,6 +442,7 @@ return function(ctx)
         for _,flake in ipairs(near) do updateFlake(flake,dt,cam) end
         -- updates are visual only once per rendered frame; physics stays 90Hz.
         if visual and drawClock>=1/60 then
+            local elapsedDraw=drawClock
             drawClock=0
             for _,flake in ipairs(near) do renderFlake(flake,cam) end
             updateEmitters(cam,dt,mode)
@@ -429,7 +453,7 @@ return function(ctx)
             for _,c in ipairs(cellList) do
                 if c.active then
                     local meltRate=(.00012+sun*.00008)/(1+c.mass*4)
-                    c.mass=math.max(0,c.mass-meltRate*dt)
+                    c.mass=math.max(0,c.mass-meltRate*elapsedDraw)
                     if c.mass<.002 then
                         hideCell(c)
                         cells[c.key]=nil;c.key=""

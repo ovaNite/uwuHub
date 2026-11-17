@@ -516,6 +516,15 @@ local okModels,modelError=pcall(function()
       if shown then retryAt=0 end
     end
     if shown then
+      -- The game can rewrite local visibility each frame, including on reload.
+      for part in pairs(originals) do
+        pcall(function()
+          if part.Parent and part.LocalTransparencyModifier<0.999 then
+            originals[part]=part.LocalTransparencyModifier
+            part.LocalTransparencyModifier=1
+          end
+        end)
+      end
       local offset=adjustment()
       pcall(function() for _,link in ipairs(motion) do
         if link.part.Parent and link.target.Parent then link.part.CFrame=link.target.CFrame*offset*link.offset end

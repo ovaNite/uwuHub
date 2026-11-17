@@ -3,6 +3,7 @@
 -- Loads original 7466-line template as UI + main core, plus optional
 -- 90Hz weather, compatibility checker and integrated Weather/Diagnostics tabs.
 local REV="2df577a270a78151c9afa2f7b7b9340e45a38f4d"
+local VISUAL_REV="47a44eee561bdc9d9cb52f04712d914d91bab74b"
 local CORE_REV="23e7d04d03c13a0020aea66c6fbbe60b538486f8"
 local BASE="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/novax/v1/"
 local env=(getgenv and getgenv()) or _G
@@ -10,7 +11,7 @@ if type(loadstring)~="function" then
   error("[NovaX] This executor does not provide loadstring")
 end
 local function load(relative)
-  local url = relative=="core/legacy.lua" and ("https://raw.githubusercontent.com/ovaNite/uwuHub/"..CORE_REV.."/novax/v1.1/core/legacy.lua") or (BASE..relative)
+  local url = relative=="core/legacy.lua" and ("https://raw.githubusercontent.com/ovaNite/uwuHub/"..CORE_REV.."/novax/v1.1/core/legacy.lua") or relative=="modules/visual_studio.lua" and ("https://raw.githubusercontent.com/ovaNite/uwuHub/"..VISUAL_REV.."/novax/v1.1/modules/visual_studio.lua") or (BASE..relative)
   local ok,result=pcall(function()return game:HttpGet(url,true)end)
   if not ok or type(result)~="string" or #result<100 then
     error("[NovaX] Cannot download "..relative..": "..tostring(result))
@@ -100,7 +101,20 @@ if type(guiFactory)=="function" then
     env.NovaXRelease.Errors[#env.NovaXRelease.Errors+1]=tostring(r)
   end
 end
+local visualFactory=execute("modules/visual_studio.lua",false)
+local visualModule=nil
+if type(visualFactory)=="function" then
+  local ok,result=pcall(visualFactory,env)
+  if ok then visualModule=result
+  else
+    table.insert(env.NovaXRelease.Errors,"Visual Studio: "..tostring(result))
+    warn("[NovaX] Visual Studio: "..tostring(result))
+  end
+end
 env.NX_CLEANUP=function()
+  if type(visualModule)=="table" and type(visualModule.Stop)=="function" then
+    pcall(visualModule.Stop)
+  end
   if type(env.NovaXWeather)=="table" and type(env.NovaXWeather.Stop)=="function" then
     pcall(env.NovaXWeather.Stop)
   end

@@ -658,8 +658,24 @@ local function newSurfaceCell(hit)
     hidePart(target.snowPart)
     return target
 end
+local weatherImpactListeners = {}
+function state.AddWeatherImpactListener(callback)
+    if type(callback) ~= "function" then return function() end end
+    weatherImpactListeners[#weatherImpactListeners+1] = callback
+    return function()
+        for i=#weatherImpactListeners,1,-1 do
+            if weatherImpactListeners[i] == callback then
+                table.remove(weatherImpactListeners,i)
+                break
+            end
+        end
+    end
+end
 local function addSurface(hit, isSnow, amount)
     if not isStationarySurface(hit) then return end
+    for _,callback in ipairs(weatherImpactListeners) do
+        pcall(callback,hit.Position,hit.Normal,isSnow,amount,hit.Instance)
+    end
     local cell = newSurfaceCell(hit)
     if not cell then return end
     cell.lastTouched = weather.elapsed
@@ -788,11 +804,21 @@ local function buildWeather()
     -- Physical-looking surface layers: clients see real 3D parts and evolving mass,
     -- but these are NOT full Navier-Stokes liquid/ice or changes to server Terrain.
     for i = 1, MAX_CELLS do
-        local wet = makeWeatherPart("LocalPuddle", Enum.PartType.Block, Vector3.new(2, .016, 2),
-            Enum.Material.Glass, Color3.fromRGB(53, 63, 69), 1)
-        local snowPart = makeWeatherPart("LocalSnowpack", Enum.PartType.Block, Vector3.new(2, .03, 2),
-            Enum.Material.Snow, colorSnow, 1)
-        weather.surfacePool[i] = {wetPart = wet, snowPart = snowPart, used = false, lastTouched = -1}
+        -- Smooth ellipsoids: no more rectangular puddles or snow tiles.
+        local wet = makeWeatherPart("LocalPuddle", Enum.PartType.Block, Vector3.one,
+            Enum.Material.Glass, Color3.fromRGB(105, 120, 129), 1)
+        local wetMesh = Instance.new("SpecialMesh")
+        wetMesh.MeshType = Enum.MeshType.Sphere; wetMesh.Scale=Vector3.one
+        wetMesh.Parent=wet
+        local snowPart = makeWeatherPart("LocalSnowpack", Enum.PartType.Block, Vector3.one,
+            Enum.Material.Snow, Color3.fromRGB(248,250,253), 1)
+        local snowMesh = Instance.new("SpecialMesh")
+        snowMesh.MeshType = Enum.MeshType.Sphere; snowMesh.Scale=Vector3.one
+        snowMesh.Parent=snowPart
+        weather.surfacePool[i] = {
+            wetPart=wet,snowPart=snowPart,wetMesh=wetMesh,snowMesh=snowMesh,
+            used=false,lastTouched=-1,seed=rand(0,1000),
+        }
     end
     for _, previous in ipairs(preserved) do
         -- The input is a snapshot from our own verified surface collider.
@@ -835,6 +861,13 @@ local function cycleWeatherIntensity()
     if state.enabled and state.weatherMode ~= "OFF" then buildWeather() end
 end
 state.CycleWeatherIntensity = cycleWeatherIntensity
+function state.SetWeatherIntensityFraction(value)
+    local amount=math.clamp(tonumber(value) or 1,.01,1.0)
+    if math.abs(state.weatherIntensity-amount)>.009 then
+        state.weatherIntensity=amount
+        if state.enabled and state.weatherMode~="OFF" then buildWeather() end
+    end
+end
 
 local function spawnParticle(d, focus, now)
     d.active = false
@@ -879,37 +912,42 @@ local function spawnParticle(d, focus, now)
 end
 
 updatePuddleOrSnow = function(cell)
-    local water = cell.water
-    local snow = cell.snow
-    if water < .017 then
+    -- The base core uses rounded lenses, while the add-on creates irregular hills.
+    local water,snow = cell.water,cell.snow
+    local n=(cell.normal and cell.normal.Unit) or Vector3.yAxis
+    local right=(math.abs(n.X)<.85 and Vector3.xAxis or Vector3.zAxis)
+    right=(right - n * right:Dot(n)).Unit
+    local forward=right:Cross(n)
+    local rot=CFrame.fromMatrix(cell.pos,right,n,forward)
+    if water < .018 then
         hidePart(cell.wetPart)
     else
-        local spread = CELL_SIZE * math.clamp(math.sqrt(water / .6), .20, .94)
-        local thickness = .011 + math.min(water, 1.25) * .014
-        cell.wetPart.Size = Vector3.new(spread, thickness, spread)
-        cell.wetPart.CFrame = CFrame.new(cell.pos + Vector3.new(0, .009 + thickness/2, 0))
-        cell.wetPart.Transparency = math.clamp(.82 - water*.22, .53, .83)
+        local w=CELL_SIZE*math.clamp(math.sqrt(water/.6),.13,.85)
+        local thick=.014+water*.008
+        cell.wetMesh.Scale=Vector3.new(w,thick,w*.76)
+        cell.wetPart.CFrame=rot*CFrame.new(0,thick*.18,0)
+        cell.wetPart.Transparency=math.clamp(.78-water*.09,.57,.87)
     end
     if snow < .025 then
         hidePart(cell.snowPart)
     else
-        local spread = CELL_SIZE * math.clamp(math.sqrt(snow / .65), .17, .96)
-        local thickness = .017 + math.min(snow, 1.5) * .12
-        cell.snowPart.Size = Vector3.new(spread, thickness, spread)
-        cell.snowPart.CFrame = CFrame.new(cell.pos + Vector3.new(0, thickness/2 + .005, 0))
-        cell.snowPart.Transparency = math.clamp(.47 - snow*.28, .06, .48)
+        local w=CELL_SIZE*math.clamp(math.sqrt(snow/.7),.12,.60)
+        local height=.018+.12*(snow^1.05)
+        cell.snowMesh.Scale=Vector3.new(w,height,w*.82)
+        cell.snowPart.CFrame=rot*CFrame.new(.11*math.sin(cell.seed),height*.25,.13*math.cos(cell.seed))
+        cell.snowPart.Transparency=math.clamp(.51-snow*.24,.08,.54)
     end
 end
 local function surfaceStep(dt)
     if weather.cellCount == 0 then return end
     local wet, snowy = 0, 0
     local sun = getDayWeight()
-    local ambientMelt = (weather.mode == "RAIN" and 0.048 or 0.002 + sun * 0.009) * dt
+    local ambientMelt = (weather.mode == "RAIN" and 0.009 or 0.00016 + sun * 0.0012) * dt
     -- Shallow-surface mass balance: input, evaporation, melting, runoff.
     for _, cell in ipairs(weather.surfacePool) do
         if cell.used then
             if cell.snow > 0 then
-                local loss = math.min(cell.snow, ambientMelt)
+                local loss = math.min(cell.snow, ambientMelt/(1+cell.snow*3))
                 cell.snow -= loss
                 if loss > 0 then
                     cell.water = math.min(1.75, cell.water + loss * .70)

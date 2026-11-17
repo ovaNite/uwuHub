@@ -149,6 +149,7 @@ local okControls,controlsError=pcall(function()
     return false
   end
   local function updateSound(sound)
+    if not active then return end
     if not isShot(sound) or (not muted and volume==100) then return end
     if saved[sound]==nil then saved[sound]=sound.Volume end
     pcall(function() sound.Volume=muted and 0 or saved[sound]*volume/100 end)
@@ -158,6 +159,7 @@ local okControls,controlsError=pcall(function()
     for _,obj in ipairs(root:GetDescendants()) do updateSound(obj) end
   end
   local function roots()
+    if not active then return end
     for _,connection in ipairs(rootConnections) do connection:Disconnect() end
     rootConnections={}
     for _,root in pairs({character=player.Character,camera=workspace.CurrentCamera,

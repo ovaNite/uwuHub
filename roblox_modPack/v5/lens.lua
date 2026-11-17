@@ -74,7 +74,7 @@ return function(ctx)
             x=rnd(.055,.945);y=rnd(.08,.87)
             if (x-.5)^2/(.19^2)+(y-.49)^2/(.18^2)>1 then break end
         end
-        if not x then return end
+        if not x or (x-.5)^2/(.19^2)+(y-.49)^2/(.18^2)<=1 then return end
         slot.x=x;slot.y=y
         slot.width=rnd(3.3,7.5)
         slot.height=slot.width*rnd(1.2,1.85)

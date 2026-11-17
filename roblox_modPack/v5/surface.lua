@@ -96,7 +96,7 @@ return function(ctx)
         local axis=c.normal
         local a=math.abs(axis.X)<.9 and Vector3.new(1,0,0) or Vector3.new(0,0,1)
         local right=(a-axis*a:Dot(axis)).Unit
-        local front=axis:Cross(right)
+        local front=right:Cross(axis)
         local basis=CFrame.fromMatrix(c.pos,right,axis,front)
         local snowThickness=.014+c.mass*.075
         c.snow.CFrame=basis*CFrame.new(0,snowThickness*.5+.008,0)

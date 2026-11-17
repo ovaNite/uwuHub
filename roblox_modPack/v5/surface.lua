@@ -1,178 +1,216 @@
--- roblox_modPack v5 / surface.lua
--- 90Hz local shallow snowpack & melt on nearby fixed roofs, ledges, and floors.
--- Small, reversible visual patches. This is not terrain voxel/rigid body physics.
+-- roblox_modPack / surface v5.2
+-- Organic, evolving local snow mounds and rounded puddles. No square tiles.
+-- Deposits are triggered by verified weather collisions from the 90Hz core.
 return function(ctx)
     local W,L=ctx.Workspace,ctx.Lighting
-    local pool,cells={},{}
     local rng=Random.new()
-    local MAX=95
-    local t,probeAccum,renderAccum,footAccum=0,0,0,0
-    local snowSound=Instance.new("Sound")
-    snowSound.Name="RM5_SnowSteps"
-    snowSound.Volume=.18
-    snowSound.Parent=ctx.Folder
-    ctx.Track(snowSound)
-    local cellSize=3.1
-    local function rand(a,b)return rng:NextNumber(a,b)end
-    local function key(v)
-        return math.floor(v.X/cellSize)..":"..math.floor(v.Y/3)..":"..math.floor(v.Z/cellSize)
-    end
-    local function part(name,material,color)
+    local N=72
+    local grid=2.35
+    local cells,slots={},{}
+    local time=0
+    local useCount=0
+    local function random(a,b) return rng:NextNumber(a,b) end
+    local function createLens(name,material,color)
         local p=Instance.new("Part")
-        p.Name=name;p.Anchored=true;p.CanCollide=false
-        p.CanTouch=false;p.CanQuery=false;p.CastShadow=false
-        p.Material=material;p.Color=color;p.Transparency=1
-        p.Size=Vector3.new(1,.02,1)
-        p.CFrame=CFrame.new(0,-10000,0)
+        p.Name=name;p.Size=Vector3.one;p.Shape=Enum.PartType.Block
+        p.Anchored=true;p.CanCollide=false;p.CanTouch=false;p.CanQuery=false
+        p.CastShadow=false;p.Material=material;p.Color=color;p.Reflectance=0
+        p.Transparency=1;p.CFrame=CFrame.new(0,-10000,0)
         p.Parent=ctx.Folder;ctx.Track(p)
-        return p
+        local mesh=Instance.new("SpecialMesh")
+        mesh.MeshType=Enum.MeshType.Sphere;mesh.Scale=Vector3.one
+        mesh.Parent=p
+        return p,mesh
     end
-    for i=1,MAX do
-        pool[i]={snow=part("RM5_SnowRoof",Enum.Material.Snow,
-            Color3.fromRGB(220,227,230)),
-            wet=part("RM5_WetRoof",Enum.Material.Glass,
-            Color3.fromRGB(88,99,106)),
-            mass=0,water=0,last=0,used=false}
+    for i=1,N do
+        local slot={used=false,water=0,snow=0,last=0,seed=random(0,200),lumps={}}
+        slot.wet,slot.wetMesh=createLens("RM5_OrganicPuddle",Enum.Material.Glass,
+            Color3.fromRGB(94,110,120))
+        slot.wet.Reflectance=.12
+        for j=1,4 do
+            local colors={
+                Color3.fromRGB(248,251,254),
+                Color3.fromRGB(238,245,251),
+                Color3.fromRGB(251,253,255),
+                Color3.fromRGB(243,247,250)}
+            local p,m=createLens("RM5_OrganicSnowMound",Enum.Material.Snow,colors[j])
+            slot.lumps[j]={
+                part=p,mesh=m,
+                radius=random(.46,1.15),
+                depth=random(.47,1.06),
+                offset=Vector2.new(random(-.46,.46),random(-.46,.46)),
+                height=random(.54,1.40),
+                rotation=random(-math.pi,math.pi),
+            }
+        end
+        slots[i]=slot
     end
-    local function evict()
-        local best,old=nil,math.huge
-        for _,c in ipairs(pool) do
+    local function key(position)
+        return math.floor(position.X/grid)..":"
+            ..math.floor(position.Y/2.6)..":"
+            ..math.floor(position.Z/grid)
+    end
+    local function disappear(c)
+        c.wet.Transparency=1
+        for _,l in ipairs(c.lumps) do l.part.Transparency=1 end
+    end
+    local function pop()
+        local target=nil
+        local oldest=math.huge
+        for _,c in ipairs(slots) do
             if not c.used then return c end
-            if c.last<old then old=c.last;best=c end
+            if c.last<oldest then target=c;oldest=c.last end
         end
-        if best then
-            cells[best.key]=nil
-            best.snow.Transparency=1;best.wet.Transparency=1
+        if target then
+            cells[target.key]=nil
+            disappear(target)
         end
-        return best
+        return target
     end
-    local function ensure(hit)
-        local k=key(hit.Position)
+    local function startCell(position,normal)
+        local k=key(position)
         local c=cells[k]
-        if c and math.abs(c.pos.Y-hit.Position.Y)>1.1 then
-            c=nil
+        if c and (c.pos-position).Magnitude<grid*1.5 then return c end
+        c=pop();if not c then return end
+        c.key=k;c.used=true;c.snow=0;c.water=0;c.last=time
+        c.pos=position;c.normal=normal.Unit;c.seed=random(0,200)
+        c.width=random(.86,1.28)
+        c.windDrift=Vector2.new(0,0)
+        for _,l in ipairs(c.lumps) do
+            l.offset=Vector2.new(random(-.6,.6),random(-.6,.6))
+            l.radius=random(.54,1.06);l.depth=random(.56,1.20)
+            l.height=random(.60,1.42)
+            l.rotation=random(-math.pi,math.pi)
         end
-        if c then return c end
-        c=evict();if not c then return end
-        c.key=k;c.used=true;c.pos=hit.Position;c.normal=hit.Normal
-        c.mass=0;c.water=0;c.last=t
-        c.width=rand(1.2,2.8)
         cells[k]=c
         return c
     end
-    local rp=RaycastParams.new()
-    rp.FilterType=Enum.RaycastFilterType.Exclude
-    rp.IgnoreWater=false
-    local function collect()
+    local accepted,impacts=0,0
+    local function deposit(position,normal,isSnow,amount,object)
         local camera=W.CurrentCamera
-        if not camera then return end
-        local loc=camera.CFrame.Position
-        rp.FilterDescendantsInstances={ctx.Folder, ctx.Players.LocalPlayer.Character}
-        for _=1,3 do
-            local x,z=rand(-32,32),rand(-32,32)
-            local origin=loc+Vector3.new(x,45,z)
-            local hit=W:Raycast(origin,Vector3.new(0,-94,0),rp)
-            if hit and hit.Normal.Y>.58 and hit.Material~=Enum.Material.Water then
-                local object=hit.Instance
-                local valid=(object==W.Terrain)
-                    or (object and object:IsA("BasePart") and object.Anchored
-                        and object.Transparency<.4 and not object:IsDescendantOf(
-                            ctx.Players.LocalPlayer.Character or ctx.Folder))
-                if valid then
-                    local c=ensure(hit)
-                    if c then
-                        c.last=t
-                        c.pos=hit.Position;c.normal=hit.Normal
-                        if ctx.Base.weatherMode=="SNOW" then
-                            c.mass=math.min(1.0,c.mass+rand(.006,.019)
-                                *ctx.Base.weatherIntensity)
-                        elseif ctx.Base.weatherMode=="RAIN" then
-                            c.water=math.min(1.0,c.water+rand(.01,.03)
-                                *ctx.Base.weatherIntensity)
-                        end
-                    end
-                end
+        if not camera or (position-camera.CFrame.Position).Magnitude>78 then return end
+        if normal.Y<.61 then return end
+        if object and object:IsA("BasePart") and (
+            not object.Anchored or object.Transparency>.42) then return end
+        -- Cap expensive new cells and decouple visual density from physics events.
+        impacts+=1
+        local chance=isSnow and .87 or .54
+        if random(0,1)>chance then return end
+        local c=startCell(position,normal)
+        if not c then return end
+        c.last=time;accepted+=1
+        local weatherStrength=math.clamp(ctx.Base.weatherIntensity or 1,.01,1)
+        if isSnow then
+            local fall=math.max(.006,amount or .012)
+            c.snow=math.clamp(c.snow+fall*random(.7,1.5)*weatherStrength,0,3.8)
+            -- Small wind-driven avalanches redistribute mass, not free-floating tiles.
+            local wind=Vector3.zero
+            pcall(function() wind=W.GlobalWind end)
+            local drift=Vector2.new(wind.X,wind.Z)
+            if drift.Magnitude>.1 then
+                c.windDrift=Vector2.new(
+                    math.clamp(c.windDrift.X+drift.X*.00016,-.44,.44),
+                    math.clamp(c.windDrift.Y+drift.Y*.00016,-.44,.44))
             end
+        else
+            c.water=math.clamp(c.water+math.max(.01,amount or .016)*random(.6,1.3),0,2.8)
         end
+    end
+    local stopListen=nil
+    if type(ctx.Base.AddWeatherImpactListener)=="function" then
+        stopListen=ctx.Base.AddWeatherImpactListener(deposit)
+    end
+    if stopListen then ctx.AddStop(stopListen) end
+    local function plane(c)
+        local n=c.normal
+        local axis=math.abs(n.X)<.9 and Vector3.xAxis or Vector3.zAxis
+        local right=(axis-n*axis:Dot(n)).Unit
+        local depth=right:Cross(n)
+        return CFrame.fromMatrix(c.pos,right,n,depth)
     end
     local function draw(c)
         if not c.used then return end
-        -- Normal based alignment: patches follow sloped roofs and stone ledges.
-        local axis=c.normal
-        local a=math.abs(axis.X)<.9 and Vector3.new(1,0,0) or Vector3.new(0,0,1)
-        local right=(a-axis*a:Dot(axis)).Unit
-        local front=right:Cross(axis)
-        local basis=CFrame.fromMatrix(c.pos,right,axis,front)
-        local snowThickness=.014+c.mass*.075
-        c.snow.CFrame=basis*CFrame.new(0,snowThickness*.5+.008,0)
-        c.snow.Size=Vector3.new(c.width,snowThickness,c.width)
-        c.snow.Transparency=c.mass>.015 and math.clamp(.77-c.mass*.56,.16,.95) or 1
-        c.wet.CFrame=basis*CFrame.new(0,.014,0)
-        c.wet.Size=Vector3.new(c.width,.009,c.width)
-        c.wet.Transparency=c.water>.02 and math.clamp(.94-c.water*.14,.71,.99) or 1
-    end
-    ctx.AddStep(function(dt,visual)
-        if not ctx.Base.enabled then
-            if visual then
-                for _,c in ipairs(pool) do
-                    c.snow.Transparency=1;c.wet.Transparency=1
-                end
+        local basis=plane(c)
+        local mass=c.snow
+        local wet=c.water
+        if wet<.018 then
+            c.wet.Transparency=1
+        else
+            local radius=.15+math.sqrt(wet)*c.width*1.20
+            local height=.01+.010*math.sqrt(wet)
+            c.wetMesh.Scale=Vector3.new(radius*2,height,radius*1.65)
+            c.wet.CFrame=basis*CFrame.new(0,height*.13,0)
+            c.wet.Transparency=math.clamp(.88-wet*.12,.58,.90)
+        end
+        if mass<.012 then
+            for _,l in ipairs(c.lumps) do l.part.Transparency=1 end
+        else
+            local growth=math.clamp(mass/2.8,0,1.25)
+            local broad=.25+math.sqrt(mass)*.45
+            -- Four overlapping smooth, differently tilted ellipsoids form one mound.
+            -- There are no rectangular edges or flat snow planes.
+            for index,l in ipairs(c.lumps) do
+                local share=(index==1 and 1 or index==2 and .80 or index==3 and .60 or .43)
+                local width=(broad+.20)*l.radius*c.width*share
+                local depth=(broad+.12)*l.depth*c.width*share
+                local height=(.05+growth*.54)*l.height*share
+                local dx=l.offset.X*broad+c.windDrift.X*share
+                local dz=l.offset.Y*broad+c.windDrift.Y*share
+                l.mesh.Scale=Vector3.new(width*2,height*2,depth*2)
+                l.part.CFrame=basis*CFrame.new(dx,height*.54,dz)
+                    * CFrame.Angles(0,l.rotation,.02*math.sin(c.seed+index))
+                l.part.Transparency=math.clamp(.64-mass*.21,.04,.64)
             end
+        end
+    end
+    local renderAccum=0
+    local rainMelting=0
+    ctx.AddStep(function(dt,visual)
+        time+=dt;renderAccum+=dt
+        if not ctx.Base.enabled then
+            if visual then for _,c in ipairs(slots) do disappear(c) end end
             return
         end
-        t+=dt;probeAccum+=dt;renderAccum+=dt;footAccum+=dt
-        if footAccum>.52 and ctx.Base.weatherMode=="SNOW" then
-            footAccum=0
-            local char=ctx.Players.LocalPlayer.Character
-            local hum=char and char:FindFirstChildOfClass("Humanoid")
-            local root=char and char:FindFirstChild("HumanoidRootPart")
-            local sid=ctx.Options.SnowSoundId
-            if root and hum and hum.MoveDirection.Magnitude>.15 and sid then
-                for _,c in ipairs(pool) do
-                    if c.used and c.mass>.14 and math.abs(root.Position.Y-c.pos.Y)<7
-                        and (Vector3.new(root.Position.X,0,root.Position.Z)
-                            - Vector3.new(c.pos.X,0,c.pos.Z)).Magnitude<2.2 then
-                        snowSound.SoundId="rbxassetid://"..sid
-                        snowSound.PlaybackSpeed=rand(.94,1.06)
-                        snowSound.Volume=math.clamp(c.mass*.3,.06,.20)
-                        pcall(function() snowSound:Play() end)
-                        break
-                    end
-                end
-            end
-        end
-        if probeAccum>.16 then
-            probeAccum-=.16
-            if ctx.Base.weatherMode~="OFF" then collect() end
-        end
-        -- Stored mass remains after switching weather. Rain melts snow.
-        local warm=(ctx.Base.weatherMode=="RAIN") and .063 or .004
-        local hour=L.ClockTime
-        if hour>9 and hour<17 then warm+=.003 end
-        for _,c in ipairs(pool) do
+        local mode=ctx.Base.weatherMode
+        local clock=L.ClockTime
+        local sun=math.clamp(math.sin((clock-6)*math.pi/12),0,1)
+        local active=0
+        local wetCells=0
+        local snowCells=0
+        for _,c in ipairs(slots) do
             if c.used then
-                if c.mass>0 then
-                    local melt=math.min(c.mass,warm*dt)
-                    c.mass-=melt;c.water=math.min(1,c.water+melt*.75)
-                end
-                if c.water>0 then
-                    local drain=math.clamp(.012+(.95-c.normal.Y)*.06,.012,.1)
-                    c.water=math.max(0,c.water-drain*dt)
-                end
-                if t-c.last>90 and c.mass<.02 and c.water<.02 then
-                    c.used=false;cells[c.key]=nil
-                    c.snow.Transparency=1;c.wet.Transparency=1
+                active+=1
+                -- More thickness -> smaller exposed surface / mass ratio -> slower melting.
+                -- Rain accelerates melting, but does not erase mounds instantly.
+                local meltBase=(mode=="RAIN" and .0011 or .00007)+sun*.00026
+                local melt=meltBase*dt/(1+c.snow*2.5)
+                local lost=math.min(c.snow,melt)
+                c.snow-=lost
+                c.water=math.min(2.8,c.water+lost*.87)
+                rainMelting+=lost
+                -- Gentle evaporation and slope-dependent runoff
+                local slope=math.sqrt(math.max(0,1-c.normal.Y*c.normal.Y))
+                c.water=math.max(0,c.water-dt*(.0006+slope*.010))
+                if c.snow>.015 then snowCells+=1 end
+                if c.water>.02 then wetCells+=1 end
+                if time-c.last>240 and c.snow<.008 and c.water<.012 then
+                    c.used=false;cells[c.key]=nil;disappear(c)
                 end
             end
         end
-        if renderAccum>.1 then
+        if renderAccum>.095 then
             renderAccum=0
-            local count=0
-            for _,c in ipairs(pool) do
-                if c.used then draw(c);count+=1 end
-            end
-            ctx.Stats.SurfacePatches=count
+            for _,c in ipairs(slots) do if c.used then draw(c) end end
         end
+        ctx.Stats.SurfacePatches=active
+        ctx.Stats.OrganicSnowMounds=snowCells
+        ctx.Stats.OrganicPuddles=wetCells
+        ctx.Stats.WeatherImpacts=impacts
+        ctx.Stats.OrganicDeposits=accepted
+        ctx.Stats.SnowMeltMass=rainMelting
     end)
-    return {Name="Roof accumulation"}
+    return {Name="Rounded hills, melt and water",Stop=function()
+        if stopListen then pcall(stopListen) end
+        for _,c in ipairs(slots) do disappear(c) end
+    end}
 end

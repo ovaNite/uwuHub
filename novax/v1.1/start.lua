@@ -3,7 +3,7 @@
 -- Loads original 7466-line template as UI + main core, plus optional
 -- 90Hz weather, compatibility checker and integrated Weather/Diagnostics tabs.
 local REV="2df577a270a78151c9afa2f7b7b9340e45a38f4d"
-local VISUAL_REV="a4993fedeb256f7f1c1919a5a64806b6d05a3bea"
+local VISUAL_REV="b93030ffa9dd71735c208293ff59d15cb63c4c59"
 local DIAG_REV="650f186a50d8b44420c946ca9d8ff39e008bd6f3"
 local CORE_REV="7d1f117e9d25d7cbb47f17ebdd59f007ecc34605"
 local BASE="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/novax/v1/"
@@ -133,10 +133,11 @@ local okControls,controlsError=pcall(function()
   local workspace=game:GetService("Workspace")
   local fast,muted,rate,volume=false,false,10,100
   local includeShared=true
+  local includeItemSounds=true
   local held,active,nextShot=false,true,0
   local saved=setmetatable({}, {__mode="k"})
   local watched=setmetatable({}, {__mode="k"})
-  local shotIds,shotIdsAll,shotIdsOther={},{},{}
+  local shotIds,shotIdsAll,shotIdsOther,itemSoundIds={},{},{},{}
   local registryReady=false
   local connections,rootConnections={},{}
   local soundService=game:GetService("SoundService")
@@ -162,12 +163,26 @@ local okControls,controlsError=pcall(function()
               local action=lower:match("_([^_]+)$") or lower
               local shooting=action:match("^shoot%d*$") or action:match("^fire%d*$")
                 or action:match("^shot%d*$") or action=="quickshot"
+                or lower:find("_shoot_",1,true) or lower:find("_fire_",1,true)
+                or lower:find("_quickshot_",1,true)
               local target=shooting and shotIdsAll or shotIdsOther
               for _,id in pairs(ids) do
                 if type(id)=="string" then
                   local numeric=id:match("%d+")
                   if numeric then target[numeric]=true end
                 end
+              end
+            end
+          end
+          local itemSource=library:FindFirstChild("ItemSounds")
+          if itemSource and itemSource:IsA("ModuleScript") then
+            local itemOk,itemData=pcall(require,itemSource)
+            if itemOk and type(itemData)=="table" then
+              for _,weapon in ipairs({"Bow","Crossbow","Slingshot","Minigun","Exogun","Grenade Launcher","Paintball Gun","Flamethrower"}) do
+                local values=itemData[weapon]
+                if type(values)=="table" then for _,id in pairs(values) do
+                  if type(id)=="string" then local numeric=id:match("%d+");if numeric then itemSoundIds[numeric]=true end end
+                end end
               end
             end
           end
@@ -179,6 +194,7 @@ local okControls,controlsError=pcall(function()
     for id in pairs(shotIdsAll) do
       if includeShared or not shotIdsOther[id] then shotIds[id]=true end
     end
+    if includeItemSounds then for id in pairs(itemSoundIds) do shotIds[id]=true end end
   end
   local function isShot(sound)
     if not sound:IsA("Sound") then return false end
@@ -194,13 +210,25 @@ local okControls,controlsError=pcall(function()
     end
     return false
   end
-  local function applySound(sound)
+  local applySound
+  local function watchVolume(sound)
+    local soundLinks=watched[sound]
+    if not soundLinks or soundLinks.volumeWatched then return end
+    soundLinks.volumeWatched=true
+    connect(sound:GetPropertyChangedSignal("Volume"),function()
+      if not active or saved[sound]==nil then return end
+      local expected=muted and 0 or saved[sound]*volume/100
+      if math.abs(sound.Volume-expected)>0.0001 then saved[sound]=sound.Volume;applySound(sound) end
+    end,soundLinks)
+  end
+  applySound=function(sound)
     if not active then return end
     if not isShot(sound) then
       local original=saved[sound]
       if original~=nil then saved[sound]=nil;pcall(function() sound.Volume=original end) end
       return
     end
+    watchVolume(sound)
     if saved[sound]==nil then saved[sound]=sound.Volume end
     local target=muted and 0 or saved[sound]*volume/100
     if math.abs(sound.Volume-target)>0.0001 then pcall(function() sound.Volume=target end) end
@@ -212,11 +240,6 @@ local okControls,controlsError=pcall(function()
     watched[sound]=soundLinks
     connect(sound:GetPropertyChangedSignal("SoundId"),function() applySound(sound) end,soundLinks)
     connect(sound:GetPropertyChangedSignal("Name"),function() applySound(sound) end,soundLinks)
-    connect(sound:GetPropertyChangedSignal("Volume"),function()
-      if not active or saved[sound]==nil then return end
-      local expected=muted and 0 or saved[sound]*volume/100
-      if math.abs(sound.Volume-expected)>0.0001 then saved[sound]=sound.Volume;applySound(sound) end
-    end,soundLinks)
     connect(sound.Destroying,function()
       for _,connection in ipairs(soundLinks) do connection:Disconnect() end
       watched[sound]=nil;saved[sound]=nil
@@ -254,10 +277,13 @@ local okControls,controlsError=pcall(function()
     for _,connection in ipairs(connections) do connection:Disconnect() end
     stopSounds()
   end}
-  connect(player.CharacterAdded,function() task.defer(roots) end)
-  connect(workspace:GetPropertyChangedSignal("CurrentCamera"),roots)
   connect(player.ChildAdded,function(child)
-    if child:IsA("Backpack") then task.defer(roots) end
+    if not child:IsA("Backpack") then return end
+    task.defer(function()
+      if not active or (not muted and volume==100) or child.Parent~=player then return end
+      for _,obj in ipairs(child:GetDescendants()) do if obj:IsA("Sound") then trackSound(obj) end end
+      connect(child.DescendantAdded,trackSound,rootConnections)
+    end)
   end)
   connect(input.InputBegan,function(event,processed)
     if event.UserInputType==Enum.UserInputType.MouseButton1 and not processed then held=true end
@@ -286,6 +312,8 @@ local okControls,controlsError=pcall(function()
   tab:CreateToggle({Name="No Shoot Sound",CurrentValue=false,Callback=function(v) muted=v;applySounds() end})
   tab:CreateToggle({Name="Include shared shot sounds (may mute other effects)",CurrentValue=true,
     Callback=function(v) includeShared=v;applySounds() end})
+  tab:CreateToggle({Name="Include weapon effect sounds (may mute extra effects)",CurrentValue=true,
+    Callback=function(v) includeItemSounds=v;applySounds() end})
   tab:CreateSlider({Name="Shot volume (%)",Range={0,100},Increment=5,CurrentValue=100,
     Callback=function(v) volume=math.clamp(tonumber(v) or 100,0,100);applySounds() end})
   roots()

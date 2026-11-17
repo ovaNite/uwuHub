@@ -123,7 +123,103 @@ if type(diagnosticsFactory)=="function" then
     warn("[NovaX] Weapon Diagnostics: "..tostring(err))
   end
 end
+-- Local weapon controls: regular Tool activation and local sound volume only.
+local controlsModule
+local okControls,controlsError=pcall(function()
+  local ui=assert(env.NX_UI_WINDOW,"NovaX GUI not available")
+  local player=game:GetService("Players").LocalPlayer
+  local input=game:GetService("UserInputService")
+  local run=game:GetService("RunService")
+  local workspace=game:GetService("Workspace")
+  local fast,muted,rate,volume=false,false,10,100
+  local held,active,nextShot=false,true,0
+  local saved=setmetatable({}, {__mode="k"})
+  local connections,rootConnections={},{}
+  local function connect(signal,callback,list)
+    local c=signal:Connect(callback)
+    table.insert(list or connections,c)
+    return c
+  end
+  local function isShot(sound)
+    if not sound:IsA("Sound") then return false end
+    local name=string.lower(sound.Name)
+    for _,word in ipairs({"shoot","shot","fire","gunshot","gunfire"}) do
+      if string.find(name,word,1,true) then return true end
+    end
+    return false
+  end
+  local function updateSound(sound)
+    if not isShot(sound) or (not muted and volume==100) then return end
+    if saved[sound]==nil then saved[sound]=sound.Volume end
+    pcall(function() sound.Volume=muted and 0 or saved[sound]*volume/100 end)
+  end
+  local function scan(root)
+    if not root then return end
+    for _,obj in ipairs(root:GetDescendants()) do updateSound(obj) end
+  end
+  local function roots()
+    for _,connection in ipairs(rootConnections) do connection:Disconnect() end
+    rootConnections={}
+    for _,root in pairs({character=player.Character,camera=workspace.CurrentCamera,
+                         backpack=player:FindFirstChildOfClass("Backpack")}) do
+      scan(root)
+      connect(root.DescendantAdded,updateSound,rootConnections)
+    end
+  end
+  local function applySounds()
+    for sound,original in pairs(saved) do
+      pcall(function() sound.Volume=muted and 0 or original*volume/100 end)
+      if not muted and volume==100 then saved[sound]=nil end
+    end
+    roots()
+  end
+  controlsModule={Stop=function()
+    active=false
+    for _,connection in ipairs(connections) do connection:Disconnect() end
+    for _,connection in ipairs(rootConnections) do connection:Disconnect() end
+    for sound,original in pairs(saved) do pcall(function() sound.Volume=original end) end
+  end}
+  connect(player.CharacterAdded,function() task.defer(roots) end)
+  connect(workspace:GetPropertyChangedSignal("CurrentCamera"),roots)
+  connect(player.ChildAdded,function(child)
+    if child:IsA("Backpack") then task.defer(roots) end
+  end)
+  connect(input.InputBegan,function(event,processed)
+    if event.UserInputType==Enum.UserInputType.MouseButton1 and not processed then held=true end
+  end)
+  connect(input.InputEnded,function(event)
+    if event.UserInputType==Enum.UserInputType.MouseButton1 then held=false end
+  end)
+  connect(input.WindowFocusReleased,function() held=false end)
+  connect(run.Heartbeat,function()
+    if not active or not fast or not held or input:GetFocusedTextBox() then return end
+    local now=os.clock()
+    if now<nextShot then return end
+    nextShot=now+1/rate
+    local character=player.Character
+    local tool=character and character:FindFirstChildOfClass("Tool")
+    if tool and tool.Enabled then pcall(function() tool:Activate() end) end
+  end)
+  local tab=ui:CreateTab("Weapon Controls",4483345998)
+  tab:CreateSection("Fast Fire")
+  tab:CreateLabel("Repeats Tool activation while holding left mouse; game cooldowns still apply.")
+  tab:CreateToggle({Name="Fast Fire",CurrentValue=false,Callback=function(v) fast=v;nextShot=0 end})
+  tab:CreateSlider({Name="Activations per second",Range={1,20},Increment=1,CurrentValue=10,
+    Callback=function(v) rate=math.clamp(tonumber(v) or 10,1,20) end})
+  tab:CreateSection("Local shot sounds")
+  tab:CreateLabel("Matches common shot sound names on your character, backpack and camera.")
+  tab:CreateToggle({Name="No Shoot Sound",CurrentValue=false,Callback=function(v) muted=v;applySounds() end})
+  tab:CreateSlider({Name="Shot volume (%)",Range={0,100},Increment=5,CurrentValue=100,
+    Callback=function(v) volume=math.clamp(tonumber(v) or 100,0,100);applySounds() end})
+  roots()
+end)
+if not okControls then
+  if controlsModule then pcall(controlsModule.Stop);controlsModule=nil end
+  table.insert(env.NovaXRelease.Errors,"Weapon Controls: "..tostring(controlsError))
+  warn("[NovaX] Weapon Controls: "..tostring(controlsError))
+end
 env.NX_CLEANUP=function()
+  if controlsModule then pcall(controlsModule.Stop) end
   if type(visualModule)=="table" and type(visualModule.Stop)=="function" then
     pcall(visualModule.Stop)
   end
@@ -139,3 +235,4 @@ print(string.format("[NovaX v%s] Klaus (Dev) | Nexus (Bug Fixer) | Errors: %d",
   env.NovaXRelease.Version,#env.NovaXRelease.Errors))
 print("[NovaX] K GUI | Aim modes: Snap / Hook (Internal) | Weather optional")
 return env.NovaXRelease
+

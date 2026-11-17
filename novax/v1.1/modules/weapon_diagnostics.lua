@@ -20,13 +20,27 @@ return function(env)
     end
     return false
   end
+  local identityCache={}
+  local identityRefreshAt=-math.huge
+  local function refreshIdentities()
+    local now=os.clock()
+    if now-identityRefreshAt<1 then return end
+    identityRefreshAt=now
+    local nextIdentities={}
+    for _,p in ipairs(Players:GetPlayers()) do
+      for _,identity in ipairs({p.Name,p.DisplayName,tostring(p.UserId)}) do
+        if #identity>0 then nextIdentities[#nextIdentities+1]=string.lower(identity) end
+      end
+    end
+    identityCache=nextIdentities
+  end
   local function cleanName(name)
     local s=tostring(name)
     if hasAny(s,blocked) then return "[redacted]" end
-    for _,p in ipairs(Players:GetPlayers()) do
-      for _,identity in ipairs({p.Name,p.DisplayName,tostring(p.UserId)}) do
-        if #identity>0 and string.find(string.lower(s),string.lower(identity),1,true) then return "[player]" end
-      end
+    refreshIdentities()
+    local low=string.lower(s)
+    for _,identity in ipairs(identityCache) do
+      if string.find(low,identity,1,true) then return "[player]" end
     end
     return string.sub(s,1,80)
   end

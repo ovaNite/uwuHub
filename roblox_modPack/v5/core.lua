@@ -861,6 +861,19 @@ local function cycleWeatherIntensity()
     if state.enabled and state.weatherMode ~= "OFF" then buildWeather() end
 end
 state.CycleWeatherIntensity = cycleWeatherIntensity
+state.Keybinds = {
+    Toggle=CONFIG.Hotkey,Details=CONFIG.DetailHotkey,
+    Weather=CONFIG.WeatherHotkey,Intensity=CONFIG.WeatherIntensityHotkey
+}
+function state.SetKeybind(action,key)
+    if state.Keybinds[action]==nil or typeof(key)~="EnumItem"
+        or key.EnumType~=Enum.KeyCode then return false end
+    for other,value in pairs(state.Keybinds) do
+        if other~=action and value==key then return false end
+    end
+    state.Keybinds[action]=key
+    return true
+end
 function state.SetWeatherIntensityFraction(value)
     local amount=math.clamp(tonumber(value) or 1,.01,1.0)
     if math.abs(state.weatherIntensity-amount)>.009 then
@@ -1320,15 +1333,15 @@ end
 
 connections[#connections + 1] = UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
-    if input.KeyCode == CONFIG.Hotkey then
+    if input.KeyCode == state.Keybinds.Toggle then
         setEnabled(not state.enabled)
-    elseif input.KeyCode == CONFIG.DetailHotkey then
+    elseif input.KeyCode == state.Keybinds.Details then
         detailsVisible = not detailsVisible
         updateUI()
-    elseif input.KeyCode == CONFIG.WeatherHotkey then
+    elseif input.KeyCode == state.Keybinds.Weather then
         cycleWeather()
         updateUI()
-    elseif input.KeyCode == CONFIG.WeatherIntensityHotkey then
+    elseif input.KeyCode == state.Keybinds.Intensity then
         cycleWeatherIntensity()
         updateUI()
     end

@@ -4401,84 +4401,55 @@ local function applyHeadGuard(t,root,hum)
   end
 end
 
--- Head Guard (R15) visual orbit. The game character and actual hitboxes stay
--- intact. A separate local-only set of R15 body visuals circles the real head.
--- This prevents the prior root-part Spinbot regression.
-local HEAD_GUARD_PART_NAMES={
-  "UpperTorso","LowerTorso",
-  "LeftUpperArm","LeftLowerArm","LeftHand",
-  "RightUpperArm","RightLowerArm","RightHand",
-  "LeftUpperLeg","LeftLowerLeg","LeftFoot",
-  "RightUpperLeg","RightLowerLeg","RightFoot",
+-- Head Guard R15 local pose. Unlike the previous version this moves the
+-- character's real client-side R15 limb joints, NOT duplicate black body clones.
+-- Local Motor6D.Transform is not an invulnerability hook and does not guarantee
+-- hitbox/animation replication to the server. The Head itself remains intact.
+local HEAD_GUARD_JOINTS={
+  {"LeftUpperArm","LeftShoulder"},
+  {"LeftLowerArm","LeftElbow"},
+  {"LeftHand","LeftWrist"},
+  {"RightUpperArm","RightShoulder"},
+  {"RightLowerArm","RightElbow"},
+  {"RightHand","RightWrist"},
+  {"LeftUpperLeg","LeftHip"},
+  {"LeftLowerLeg","LeftKnee"},
+  {"LeftFoot","LeftAnkle"},
+  {"RightUpperLeg","RightHip"},
+  {"RightLowerLeg","RightKnee"},
+  {"RightFoot","RightAnkle"},
 }
-local headGuardOrbit={char=nil,camera=nil,folder=nil,parts={},originals={},angle=0}
+local headGuardOrbit={char=nil,motors={},angle=0,active=false}
 restoreHeadGuardOrbit=function()
-  if headGuardOrbit.folder then
-    pcall(function() headGuardOrbit.folder:Destroy() end)
-  end
-  for part,original in pairs(headGuardOrbit.originals) do
-    if part and part.Parent then
-      pcall(function()
-        if part.LocalTransparencyModifier>=0.999 then
-          part.LocalTransparencyModifier=original
-        end
-      end)
+  for _,entry in ipairs(headGuardOrbit.motors) do
+    local motor=entry.motor
+    if motor and motor.Parent then
+      pcall(function()motor.Transform=CFrame.new()end)
     end
   end
-  headGuardOrbit={char=nil,camera=nil,folder=nil,parts={},originals={},angle=0}
+  headGuardOrbit={char=nil,motors={},angle=0,active=false}
 end
-local function createHeadGuardOrbit(char)
-  local camera=workspace.CurrentCamera
-  local head=char and char:FindFirstChild("Head")
-  if not camera or not head or not head:IsA("BasePart") then return false end
+local function setHeadGuardRig(char)
   restoreHeadGuardOrbit()
-  local folder=Instance.new("Folder")
-  folder.Name="NovaX_HeadGuard_R15_Orbit"
-  folder.Parent=camera
-  headGuardOrbit.char=char
-  headGuardOrbit.camera=camera
-  headGuardOrbit.folder=folder
-  local count=#HEAD_GUARD_PART_NAMES
-  -- Four distinct height levels encircle the head, including visibly ABOVE
-  -- and BELOW it. This moves client-only visual copies, not real hitboxes.
-  local levels={3.25,1.25,-1.25,-3.25}
-  for i,name in ipairs(HEAD_GUARD_PART_NAMES) do
-    local original=char:FindFirstChild(name)
-    if original and original:IsA("BasePart") then
-      local ok,clone=pcall(function()return original:Clone()end)
-      if ok and clone and clone:IsA("BasePart") then
-        -- Pure local visual mesh: no joints, physics, scripts or hitbox logic.
-        for _,child in ipairs(clone:GetDescendants()) do
-          if child:IsA("LuaSourceContainer") or child:IsA("JointInstance")
-            or child:IsA("Constraint") or child:IsA("Sound")
-            or child:IsA("TouchTransmitter") or child:IsA("ParticleEmitter")
-            or child:IsA("Trail") then
-            child:Destroy()
-          end
-        end
-        clone.Name="NovaX_Orbit_"..name
-        clone.Anchored=true
-        clone.CanCollide=false
-        clone.CanTouch=false
-        clone.CanQuery=false
-        clone.Massless=true
-        clone.LocalTransparencyModifier=0
-        clone.CFrame=original.CFrame
-        clone.Parent=folder
-        headGuardOrbit.parts[#headGuardOrbit.parts+1]={
-          original=original,visual=clone,
-          slot=(math.floor((i-1)/4)/math.ceil(count/4))*math.pi*2
-            + ((i-1)%4)*0.45,
-          radiusOffset=((i-1)%3)*0.24,
-          height=levels[((i-1)%4)+1],
-          index=i,
-        }
-        headGuardOrbit.originals[original]=original.LocalTransparencyModifier
-      end
+  local head=char and char:FindFirstChild("Head")
+  if not head or not head:IsA("BasePart") then return false end
+  for i,info in ipairs(HEAD_GUARD_JOINTS) do
+    local part=char:FindFirstChild(info[1])
+    local motor=part and part:FindFirstChild(info[2])
+    if part and part:IsA("BasePart") and motor and motor:IsA("Motor6D")
+      and motor.Part0 and motor.Part1==part then
+      local layer=((i-1)%4)+1
+      headGuardOrbit.motors[#headGuardOrbit.motors+1]={
+        motor=motor,
+        part=part,
+        slot=(i-1)*(math.pi*2/#HEAD_GUARD_JOINTS),
+        layer=layer,
+        index=i,
+      }
     end
   end
-  if #headGuardOrbit.parts==0 then restoreHeadGuardOrbit();return false end
-  return true
+  headGuardOrbit.char=char
+  return #headGuardOrbit.motors>0
 end
 local function stepHeadGuardOrbit(dt)
   local active=RUNNING and STATE.AntiHit and STATE.AntiHitMode=="Head Guard (R15)"
@@ -4486,43 +4457,48 @@ local function stepHeadGuardOrbit(dt)
   local char=LocalPlayer.Character
   local hum=char and char:FindFirstChildOfClass("Humanoid")
   local head=char and char:FindFirstChild("Head")
-  if not active or not char or not hum or hum.Health<=0 or not head or not head:IsA("BasePart") then
-    if headGuardOrbit.folder then restoreHeadGuardOrbit() end
+  if not active or not char or not hum or hum.Health<=0 or
+    not head or not head:IsA("BasePart") then
+    if headGuardOrbit.char then restoreHeadGuardOrbit() end
     return
   end
   local camera=workspace.CurrentCamera
-  if headGuardOrbit.char~=char or headGuardOrbit.camera~=camera
-    or not headGuardOrbit.folder or not headGuardOrbit.folder.Parent then
-    if not createHeadGuardOrbit(char) then return end
+  -- First person uses the game's original arm/weapon pose.
+  local firstPerson=camera and ((camera.CFrame.Position-head.Position).Magnitude<2.5
+    or LocalPlayer.CameraMode==Enum.CameraMode.LockFirstPerson)
+  if firstPerson then
+    if headGuardOrbit.char then restoreHeadGuardOrbit() end
+    return
+  end
+  if headGuardOrbit.char~=char then
+    if not setHeadGuardRig(char) then return end
   end
   local speed=math.clamp(safeNum(STATE.AntiHitSpeed),0.4,12)
-  local radius=math.clamp(safeNum(STATE.AntiHitOrbitRadius),1.5,6)
-  headGuardOrbit.angle+=math.clamp(tonumber(dt) or 0,0,0.05)*speed*1.8
+  headGuardOrbit.angle+=math.clamp(tonumber(dt) or 0,0,0.06)*speed*1.8
   local phase=headGuardOrbit.angle
-  local pivot=CFrame.new(head.Position)
-  -- First-person cameras sit at/near Head. Never draw the orbit into the
-  -- user's weapon view; keep the effect third-person only.
-  local firstPerson=(camera.CFrame.Position-head.Position).Magnitude<2.5
-    or LocalPlayer.CameraMode==Enum.CameraMode.LockFirstPerson
-  for _,entry in ipairs(headGuardOrbit.parts) do
-    local original,visual=entry.original,entry.visual
-    if original.Parent and visual.Parent then
-      -- The actual head stays put. The clones are hidden in first person and
-      -- resume their 3D orbit as soon as the camera returns to third person.
-      if original.LocalTransparencyModifier<0.999 then
-        original.LocalTransparencyModifier=1
-      end
-      visual.LocalTransparencyModifier=firstPerson and 1 or 0
+  local radius=math.clamp(safeNum(STATE.AntiHitOrbitRadius),1.5,6)
+  local heights={3.25,1.3,-1.3,-3.25}
+  local pivot=head.Position
+  -- The head and both torso joints remain in the normal physical R15 chain.
+  -- Only arms/legs are repositioned; no damaging hitbox is removed/rewired.
+  for _,entry in ipairs(headGuardOrbit.motors) do
+    local motor,part=entry.motor,entry.part
+    if motor.Parent and motor.Part0 and motor.Part1==part and part.Parent then
       local angle=phase+entry.slot
-      local bob=math.sin(phase*1.5+entry.index*0.8)*0.18
-      local r=radius+entry.radiusOffset
-      local orbit=pivot*CFrame.Angles(0,-angle,0)
-        *CFrame.new(r,entry.height+bob,0)
-      visual.CFrame=orbit*CFrame.Angles(
-        math.sin(phase*0.85+entry.index)*0.35,
-        angle+math.pi/2,
-        math.cos(phase*1.15+entry.index)*0.4
-      )
+      local desired=CFrame.new(
+        pivot+Vector3.new(math.cos(angle)*radius,
+          heights[entry.layer]+math.sin(phase*1.25+entry.index)*0.2,
+          math.sin(angle)*radius)
+      )*CFrame.Angles(
+        math.sin(phase+entry.index)*0.3,
+        -angle,
+        math.cos(phase*1.4+entry.index)*0.35)
+      local ok=pcall(function()
+        motor.Transform=(motor.Part0.CFrame*motor.C0):Inverse()*desired*motor.C1
+      end)
+      if not ok then
+        pcall(function()motor.Transform=CFrame.new()end)
+      end
     end
   end
 end
@@ -4533,11 +4509,13 @@ function applyLobbyAntiHit(t,mode)
   if j.neck and j.neck:IsA("Motor6D") then j.neck.Transform=CFrame.Angles(pitch,yaw,roll) end; if j.waist and j.waist:IsA("Motor6D") then j.waist.Transform=CFrame.Angles(pitch*0.2,-yaw*0.25,0) end
 end
 function setupMovement()
-  addConnection("headGuardOrbit",RunService.RenderStepped:Connect(function(dt)
-    local ok,err=pcall(stepHeadGuardOrbit,dt)
-    if not ok then
-      if headGuardOrbit.folder then restoreHeadGuardOrbit() end
-    end
+  -- R15 Animator normally sets Motor6D.Transform before PreSimulation.
+  -- Apply this local pose afterwards for stable in-game third-person visuals.
+  local orbitSignal=RunService.PreSimulation or RunService.Stepped
+  addConnection("headGuardOrbit",orbitSignal:Connect(function(a,b)
+    local dt=(typeof(b)=="number" and b) or a
+    local ok=pcall(stepHeadGuardOrbit,dt)
+    if not ok and headGuardOrbit.char then restoreHeadGuardOrbit() end
   end))
   addConnection("move", RunService.Heartbeat:Connect(function()
     if not RUNNING then return end
@@ -5522,7 +5500,7 @@ end
         STATE.AntiHitGuardDodge = v
       end,
     }))
-    MT:CreateLabel("Head Guard body orbit: third-person only; local visuals cannot block server hits.")
+    MT:CreateLabel("Head Guard R15 pose: real local limb joints, no fake cloned body. Server hits remain authoritative.")
     bindStateControl("AntiHitOrbitRadius", c:CreateSlider({
       Name = "Head Guard: Orbit Radius",
       Range = {1.5,6},

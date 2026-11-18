@@ -402,6 +402,13 @@ local STATE = {
   NovaXSkinSelections = "{}",
   NovaXSkinConfigFilter = "{}",
   NovaXShopPreview = false,
+  -- Local-only catalogue browser; does not modify the game's ownership state.
+  NovaXCosmeticPreview = false,
+  NovaXCosmeticCategory = "Skins",
+  NovaXCosmeticPage = 1,
+  NovaXCosmeticSelection = "",
+  NovaXCosmeticWrapName = "",
+  NovaXCosmeticCharmName = "",
   NovaXSkinOffsetX = 0,
   NovaXSkinOffsetY = 0,
   NovaXSkinOffsetZ = 0,

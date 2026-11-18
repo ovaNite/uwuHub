@@ -402,6 +402,7 @@ local STATE = {
   NovaXUnlockCategory = "All",
   NovaXUnlockPage = 1,
   NovaXUnlockSelection = "",
+  NovaXGameSelected = "",
   NovaXWeatherMode = "OFF",
   NovaXWeatherRain = 55,
   NovaXWeatherSnow = 65,

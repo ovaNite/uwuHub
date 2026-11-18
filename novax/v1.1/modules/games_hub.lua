@@ -173,7 +173,7 @@ return function(env)
     UDim2.fromOffset(12,79),colors.muted)
   statusName.TextSize=11
   local codeBox=new("TextBox",{
-    Name="NovaXCodeEditor",Size=UDim2.new(1,-24,1,-240),
+    Name="NovaXCodeEditor",Size=UDim2.new(1,-24,1,-210),
     Position=UDim2.fromOffset(12,104),
     BackgroundColor3=colors.bg,BorderSizePixel=0,
     ClearTextOnFocus=false,MultiLine=true,
@@ -189,20 +189,54 @@ return function(env)
     PaddingLeft=UDim.new(0,10),PaddingRight=UDim.new(0,10),
     PaddingTop=UDim.new(0,8),PaddingBottom=UDim.new(0,8),
   },codeBox)
-  local controlsY=UDim2.new(0,12,1,-126)
+  local controlsY=UDim2.new(0,12,1,-105)
   local sourceBtn=button(inspector,"LOAD SOURCE",UDim2.new(0.48,0,0,34),
     controlsY,function()end)
   local customBtn=button(inspector,"NEW SCRIPT",UDim2.new(0.48,0,0,34),
-    UDim2.new(0.52,-12,1,-126),function()end)
+    UDim2.new(0.52,-12,1,-105),function()end)
   local runBtn=button(inspector,"RUN SCRIPT",UDim2.new(0.48,0,0,34),
-    UDim2.new(0,12,1,-85),function()end,true)
+    UDim2.new(0,12,1,-64),function()end,true)
   local stopBtn=button(inspector,"STOP",UDim2.new(0.48,0,0,34),
-    UDim2.new(0.52,-12,1,-85),function()end)
+    UDim2.new(0.52,-12,1,-64),function()end)
   local console=label(inspector,"No script executed",
-    UDim2.new(1,-24,0,37),UDim2.new(0,12,1,-47),colors.muted)
+    UDim2.new(1,-24,0,22),UDim2.new(0,12,1,-26),colors.muted)
   console.TextWrapped=true
   console.TextYAlignment=Enum.TextYAlignment.Top
   console.TextSize=10
+  local expandBtn=button(inspector,"EXPAND",UDim2.fromOffset(68,25),
+    UDim2.new(1,-80,0,10),function()end)
+  expandBtn.TextSize=10
+  local popup=new("Frame",{
+    Name="NovaXExpandedEditor",Size=UDim2.new(1,-16,1,-16),
+    Position=UDim2.fromOffset(8,8),BackgroundColor3=colors.panel,
+    BorderSizePixel=0,ZIndex=22,Visible=false,
+  },panel)
+  round(popup,14)
+  border(popup)
+  local popupTitle=label(popup,"LUA ENGINE  /  CODE EDITOR",
+    UDim2.new(1,-30,0,34),UDim2.fromOffset(17,9),colors.white,Enum.Font.GothamBold)
+  popupTitle.ZIndex=24
+  popupTitle.TextSize=16
+  local expanded=new("TextBox",{
+    Name="NovaXExpandedCode",Size=UDim2.new(1,-28,1,-120),
+    Position=UDim2.fromOffset(14,50),BackgroundColor3=colors.bg,
+    BorderSizePixel=0,ZIndex=23,ClearTextOnFocus=false,MultiLine=true,
+    TextWrapped=false,TextXAlignment=Enum.TextXAlignment.Left,
+    TextYAlignment=Enum.TextYAlignment.Top,
+    Font=Enum.Font.Code,TextSize=14,TextColor3=colors.white,
+    Text=editorDefault,
+  },popup)
+  round(expanded,10)
+  border(expanded)
+  new("UIPadding",{PaddingLeft=UDim.new(0,12),PaddingRight=UDim.new(0,12),
+    PaddingTop=UDim.new(0,10),PaddingBottom=UDim.new(0,10)},expanded)
+  local popupSave=button(popup,"SAVE DRAFT",UDim2.fromOffset(128,38),
+    UDim2.new(0,14,1,-55),function()end)
+  local popupClose=button(popup,"CLOSE",UDim2.fromOffset(110,38),
+    UDim2.new(1,-248,1,-55),function()end)
+  local popupRun=button(popup,"RUN SCRIPT",UDim2.fromOffset(123,38),
+    UDim2.new(1,-133,1,-55),function()end,true)
+  popupSave.ZIndex=24;popupClose.ZIndex=24;popupRun.ZIndex=24
 
   local function emit(message,color)
     local line=tostring(message or "")
@@ -486,6 +520,35 @@ return function(env)
       TextColor3=open and colors.bg or colors.white})
     if open and os.clock()-lastRefresh>20 then scanRepo() end
   end
+  expandBtn.MouseButton1Click:Connect(function()
+    expanded.Text=codeBox.Text
+    popup.Visible=true
+  end)
+  popupClose.MouseButton1Click:Connect(function()
+    codeBox.Text=expanded.Text
+    popup.Visible=false
+  end)
+  popupRun.MouseButton1Click:Connect(function()
+    codeBox.Text=expanded.Text
+    popup.Visible=false
+    runEditor()
+  end)
+  popupSave.MouseButton1Click:Connect(function()
+    codeBox.Text=expanded.Text
+    if type(writefile)~="function" then
+      emit("Save unavailable: executor does not implement writefile()",colors.red)
+      return
+    end
+    local ok,err=pcall(function()
+      if type(makefolder)=="function" and type(isfolder)=="function" then
+        if not isfolder("NovaX") then makefolder("NovaX") end
+        if not isfolder("NovaX/Games") then makefolder("NovaX/Games") end
+      end
+      writefile("NovaX/Games/editor_draft.lua",expanded.Text)
+    end)
+    emit(ok and "Saved local editor draft" or ("Draft save failed: "..tostring(err)),
+      ok and colors.green or colors.red)
+  end)
   mainBtn.MouseButton1Click:Connect(function()activate("Main")end)
   gamesBtn.MouseButton1Click:Connect(function()activate("Games")end)
   refreshBtn.MouseButton1Click:Connect(scanRepo)

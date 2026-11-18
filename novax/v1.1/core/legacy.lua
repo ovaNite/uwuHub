@@ -23,6 +23,7 @@ local applySoftSpoof = function() return true end
 local applyReplicationControlSpoof = function() return false end
 local restoreAntiHitPose = function() end
 local restoreAntiHitMovement = function() end
+local restoreHeadGuardOrbit = function() end
 local aimTarget
 local aimLockedPlayer
 local aimLockLostSince
@@ -275,6 +276,7 @@ cleanup = function()
     if setFPSBoost then setFPSBoost(false) end
   end)
   pcall(restoreAntiHitPose)
+  pcall(restoreHeadGuardOrbit)
   pcall(restoreAntiHitMovement)
   pcall(function()
     if getgenv then getgenv().NX_UI_WINDOW=nil end
@@ -410,6 +412,7 @@ local STATE = {
   AntiHitSpeed = 2.2,
   AntiHitExperimental = false,
   AntiHitGuardDodge = true,
+  AntiHitOrbitRadius = 2.5,
   AntiVoid = true,
   
   BindToggleGUI = "K",
@@ -4170,19 +4173,8 @@ local function applyHeadGuard(t,root,hum)
   if headGuard.char~=char then
     headGuard={char=char,nextScan=0,nextDodge=0,dodgeUntil=0,lateral=nil,threat=0}
   end
-  local j=getAntiHitJoints()
-  if not j then return end
-  -- Bounded rotations around R15's neck and waist, not a whole-body tumble.
-  local factor=STATE.AntiHitExperimental and 1.25 or 1
-  local yaw=(math.sin(t*4.3)*0.49+math.sin(t*7.1)*0.17)*factor
-  local pitch=(-0.22+math.sin(t*5.2)*0.22)*factor
-  local roll=(math.cos(t*5.8)*0.36+math.sin(t*9.6)*0.11)*factor
-  if j.neck and j.neck:IsA("Motor6D") then
-    j.neck.Transform=CFrame.Angles(pitch,yaw,roll)
-  end
-  if j.waist and j.waist:IsA("Motor6D") then
-    j.waist.Transform=CFrame.Angles(-pitch*0.3,-yaw*0.35,-roll*0.28)
-  end
+  -- Head remains at its normal position; orbital visuals are updated
+  -- independently on RenderStepped. Real hitboxes are not changed.
   local now=os.clock()
   if now>=headGuard.nextScan then
     headGuard.nextScan=now+0.13
@@ -4205,26 +4197,122 @@ local function applyHeadGuard(t,root,hum)
     if proposed.Magnitude>0.01 then hum:Move(proposed.Unit,false) end
   end
 end
--- Rotate the R15 body clockwise around the HEAD's current world position.
--- The camera/visual head is the pivot, not HumanoidRootPart. This affects only
--- local character movement and does not make head hitboxes invulnerable.
-local function applyRightHeadPivot(root,hum,dt)
-  local char=getChar()
+
+-- Head Guard (R15) visual orbit. The game character and actual hitboxes stay
+-- intact. A separate local-only set of R15 body visuals circles the real head.
+-- This prevents the prior root-part Spinbot regression.
+local HEAD_GUARD_PART_NAMES={
+  "UpperTorso","LowerTorso",
+  "LeftUpperArm","LeftLowerArm","LeftHand",
+  "RightUpperArm","RightLowerArm","RightHand",
+  "LeftUpperLeg","LeftLowerLeg","LeftFoot",
+  "RightUpperLeg","RightLowerLeg","RightFoot",
+}
+local headGuardOrbit={char=nil,camera=nil,folder=nil,parts={},originals={},angle=0}
+restoreHeadGuardOrbit=function()
+  if headGuardOrbit.folder then
+    pcall(function() headGuardOrbit.folder:Destroy() end)
+  end
+  for part,original in pairs(headGuardOrbit.originals) do
+    if part and part.Parent then
+      pcall(function()
+        if part.LocalTransparencyModifier>=0.999 then
+          part.LocalTransparencyModifier=original
+        end
+      end)
+    end
+  end
+  headGuardOrbit={char=nil,camera=nil,folder=nil,parts={},originals={},angle=0}
+end
+local function createHeadGuardOrbit(char)
+  local camera=workspace.CurrentCamera
   local head=char and char:FindFirstChild("Head")
-  if not head or not head:IsA("BasePart") then return false end
-  if not root or not root:IsA("BasePart") or not hum or hum.Health<=0 then return false end
-  setAntiHitAutoRotate(hum,false)
-  local elapsed=math.clamp(tonumber(dt) or 1/60,0,1/30)
-  local speed=math.clamp(safeNum(STATE.AntiHitSpeed),0.4,12)
-  -- Negative yaw turns right. Delta rotation avoids runaway tick() angles.
-  local radians=-speed*2.8*elapsed
-  local pivot=head.Position
-  local forward=Vector3.new(root.CFrame.LookVector.X,0,root.CFrame.LookVector.Z)
-  if forward.Magnitude<0.05 then forward=Vector3.new(0,0,-1) end
-  local upright=CFrame.lookAt(root.Position,root.Position+forward.Unit,Vector3.yAxis)
-  root.CFrame=CFrame.new(pivot)*CFrame.Angles(0,radians,0)
-    *CFrame.new(-pivot)*upright
+  if not camera or not head or not head:IsA("BasePart") then return false end
+  restoreHeadGuardOrbit()
+  local folder=Instance.new("Folder")
+  folder.Name="NovaX_HeadGuard_R15_Orbit"
+  folder.Parent=camera
+  headGuardOrbit.char=char
+  headGuardOrbit.camera=camera
+  headGuardOrbit.folder=folder
+  local count=#HEAD_GUARD_PART_NAMES
+  for i,name in ipairs(HEAD_GUARD_PART_NAMES) do
+    local original=char:FindFirstChild(name)
+    if original and original:IsA("BasePart") then
+      local ok,clone=pcall(function()return original:Clone()end)
+      if ok and clone and clone:IsA("BasePart") then
+        -- Pure local visual mesh: no joints, physics, scripts or hitbox logic.
+        for _,child in ipairs(clone:GetDescendants()) do
+          if child:IsA("LuaSourceContainer") or child:IsA("JointInstance")
+            or child:IsA("Constraint") or child:IsA("Sound")
+            or child:IsA("TouchTransmitter") or child:IsA("ParticleEmitter")
+            or child:IsA("Trail") then
+            child:Destroy()
+          end
+        end
+        clone.Name="NovaX_Orbit_"..name
+        clone.Anchored=true
+        clone.CanCollide=false
+        clone.CanTouch=false
+        clone.CanQuery=false
+        clone.Massless=true
+        clone.LocalTransparencyModifier=0
+        clone.CFrame=original.CFrame
+        clone.Parent=folder
+        headGuardOrbit.parts[#headGuardOrbit.parts+1]={
+          original=original,visual=clone,
+          slot=(i-1)/count*math.pi*2,
+          radiusOffset=((i-1)%3)*0.22,
+          height=math.clamp((original.Position.Y-head.Position.Y)*0.28,-1.5,0.8),
+          index=i,
+        }
+        headGuardOrbit.originals[original]=original.LocalTransparencyModifier
+      end
+    end
+  end
+  if #headGuardOrbit.parts==0 then restoreHeadGuardOrbit();return false end
   return true
+end
+local function stepHeadGuardOrbit(dt)
+  local active=RUNNING and STATE.AntiHit and STATE.AntiHitMode=="Head Guard (R15)"
+    and not (STATE.FlyEnabled and STATE.FlyToggle)
+  local char=LocalPlayer.Character
+  local hum=char and char:FindFirstChildOfClass("Humanoid")
+  local head=char and char:FindFirstChild("Head")
+  if not active or not char or not hum or hum.Health<=0 or not head or not head:IsA("BasePart") then
+    if headGuardOrbit.folder then restoreHeadGuardOrbit() end
+    return
+  end
+  local camera=workspace.CurrentCamera
+  if headGuardOrbit.char~=char or headGuardOrbit.camera~=camera
+    or not headGuardOrbit.folder or not headGuardOrbit.folder.Parent then
+    if not createHeadGuardOrbit(char) then return end
+  end
+  local speed=math.clamp(safeNum(STATE.AntiHitSpeed),0.4,12)
+  local radius=math.clamp(safeNum(STATE.AntiHitOrbitRadius),1.5,6)
+  headGuardOrbit.angle+=math.clamp(tonumber(dt) or 0,0,0.05)*speed*1.8
+  local phase=headGuardOrbit.angle
+  local pivot=CFrame.new(head.Position)
+  for _,entry in ipairs(headGuardOrbit.parts) do
+    local original,visual=entry.original,entry.visual
+    if original.Parent and visual.Parent then
+      -- Preserve the head at the real character's position. Every BODY part
+      -- circles clockwise in its own slot, spread across the orbit layers.
+      if original.LocalTransparencyModifier<0.999 then
+        original.LocalTransparencyModifier=1
+      end
+      local angle=phase+entry.slot
+      local bob=math.sin(phase*1.5+entry.index*0.8)*0.28
+      local r=radius+entry.radiusOffset
+      local orbit=pivot*CFrame.Angles(0,-angle,0)
+        *CFrame.new(r,entry.height+bob,0)
+      visual.CFrame=orbit*CFrame.Angles(
+        math.sin(phase*0.85+entry.index)*0.35,
+        angle+math.pi/2,
+        math.cos(phase*1.15+entry.index)*0.4
+      )
+    end
+  end
 end
 
 function applyLobbyAntiHit(t,mode)
@@ -4233,7 +4321,13 @@ function applyLobbyAntiHit(t,mode)
   if j.neck and j.neck:IsA("Motor6D") then j.neck.Transform=CFrame.Angles(pitch,yaw,roll) end; if j.waist and j.waist:IsA("Motor6D") then j.waist.Transform=CFrame.Angles(pitch*0.2,-yaw*0.25,0) end
 end
 function setupMovement()
-  addConnection("move", RunService.Heartbeat:Connect(function(dt)
+  addConnection("headGuardOrbit",RunService.RenderStepped:Connect(function(dt)
+    local ok,err=pcall(stepHeadGuardOrbit,dt)
+    if not ok then
+      if headGuardOrbit.folder then restoreHeadGuardOrbit() end
+    end
+  end))
+  addConnection("move", RunService.Heartbeat:Connect(function()
     if not RUNNING then return end
     pcall(function()
       local root,hum=getRoot(),getHumanoid()
@@ -4249,18 +4343,18 @@ function setupMovement()
         local t=tick()*math.clamp(safeNum(STATE.AntiHitSpeed),0.4,12)
         local mode=tostring(STATE.AntiHitMode or "Adaptive Jitter")
         if mode=="Head Guard (R15)" then
-          -- Preserve the extra R15 neck/waist guard and evasive footwork.
+          -- Keep head and HumanoidRootPart orientation controlled by the game.
+          -- Body orbit is a separate local visual layer, never a root spin.
+          if antiHitPose.char then restoreAntiHitPose() end
+          restoreAntiHitMovement()
           applyHeadGuard(t,root,hum)
-          applyRightHeadPivot(root,hum,dt)
-        elseif mode=="Head Orbit" then
-          if antiHitPose.char then restoreAntiHitPose() end
-          applyRightHeadPivot(root,hum,dt)
         else
-          if antiHitPose.char then restoreAntiHitPose() end
+          restoreAntiHitPose()
           setAntiHitAutoRotate(hum,false)
           local yaw=t*(mode=="Orbital Drift" and 5.4 or 7.2)
           local pitch=math.sin(t*3.4)*(STATE.AntiHitExperimental and 1.4 or 0.85)
           local roll=math.cos(t*4.1)*(mode=="Vector Chaos" and 1.4 or 0.85)
+          if mode=="Head Orbit" then pitch=pitch+math.pi end
           root.CFrame=CFrame.new(root.Position)*CFrame.Angles(pitch,yaw,roll)
         end
       else
@@ -5201,6 +5295,15 @@ end
       CurrentValue = STATE.AntiHitGuardDodge,
       Callback = function(v)
         STATE.AntiHitGuardDodge = v
+      end,
+    }))
+    bindStateControl("AntiHitOrbitRadius", c:CreateSlider({
+      Name = "Head Guard: Orbit Radius",
+      Range = {1.5,6},
+      Increment = 0.25,
+      CurrentValue = STATE.AntiHitOrbitRadius,
+      Callback = function(v)
+        STATE.AntiHitOrbitRadius=math.clamp(safeNum(v),1.5,6)
       end,
     }))
     bindStateControl("AntiVoid", c:CreateToggle({

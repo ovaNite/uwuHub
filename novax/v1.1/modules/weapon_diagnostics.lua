@@ -1,4 +1,4 @@
--- NovaX weapon diagnostics v2: bounded, opt-in, client-visible metadata.
+-- NovaX weapon diagnostics v3: bounded, opt-in, client-visible metadata.
 return function(env)
   local Players=game:GetService("Players")
   local HttpService=game:GetService("HttpService")
@@ -9,7 +9,8 @@ return function(env)
   assert(type(ui)=="table" and type(ui.CreateTab)=="function","NovaX GUI not available")
   local words={"weapon","gun","rifle","pistol","shotgun","sniper","revolver","minigun",
     "projectile","bullet","spread","accuracy","recoil","firerate","fire_rate","cooldown",
-    "reload","ammo","magazine","muzzle","barrel","crossbow","bow","launcher","grenade"}
+    "reload","ammo","magazine","muzzle","barrel","crossbow","bow","launcher","grenade",
+    "shoot","attack","inputspamming","fireinterval","shotdelay"}
   local blocked={"password","cookie","token","secret","credential","auth","session"}
   local function hasAny(name,list)
     local n=string.lower(tostring(name))
@@ -57,11 +58,73 @@ return function(env)
     scanning=true
     task.spawn(function()
       local ok,err=pcall(function()
-        local report={schema="novax.weapon-diagnostics.v2",summary={},matches={},warnings={
+        local report={schema="novax.weapon-diagnostics.v3",summary={},matches={},catalog={},warnings={
           "Only client-visible object metadata and matching finite numeric/boolean values are included.",
-          "Script contents, network messages, credentials, and player character models are excluded."
+          "Only script/module names (never source), no network payloads or player character models."
         }}
-        local roots={{instance=Workspace,label="Workspace"},{instance=ReplicatedStorage,label="ReplicatedStorage"}}
+        -- Prioritize the client weapon roots before broad workspace scans.
+        local roots={}
+        local function addRoot(instance,label)
+          if instance then roots[#roots+1]={instance=instance,label=label} end
+        end
+        local scripts=player and player:FindFirstChild("PlayerScripts")
+        local assets=scripts and scripts:FindFirstChild("Assets")
+        local views=assets and assets:FindFirstChild("ViewModels")
+        local standard=views and views:FindFirstChild("Weapons")
+        local projectiles=assets and assets:FindFirstChild("Projectiles")
+        local throwables=assets and assets:FindFirstChild("Throwables")
+        local allSkins={}
+        local function names(source,maximum)
+          local found={}
+          if source then
+            for _,child in ipairs(source:GetChildren()) do
+              if #found>=maximum then break end
+              found[#found+1]=cleanName(child.Name)
+            end
+          end
+          table.sort(found)
+          return found
+        end
+        addRoot(standard,"PlayerScripts/Assets/ViewModels/Weapons")
+        if views then
+          for _,folder in ipairs(views:GetChildren()) do
+            if folder~=standard then
+              local label="PlayerScripts/Assets/ViewModels/"..cleanName(folder.Name)
+              addRoot(folder,label)
+              allSkins[label]=names(folder,350)
+            end
+          end
+        end
+        addRoot(projectiles,"PlayerScripts/Assets/Projectiles")
+        addRoot(throwables,"PlayerScripts/Assets/Throwables")
+        addRoot(scripts and scripts:FindFirstChild("Modules"),"PlayerScripts/Modules")
+        addRoot(scripts and scripts:FindFirstChild("Controllers"),"PlayerScripts/Controllers")
+        local first=Workspace:FindFirstChild("ViewModels")
+        first=first and first:FindFirstChild("FirstPerson")
+        addRoot(first,"Workspace/ViewModels/FirstPerson")
+        local temp=ReplicatedStorage:FindFirstChild("Assets")
+        temp=temp and temp:FindFirstChild("Temp")
+        temp=temp and temp:FindFirstChild("ViewModels")
+        addRoot(temp,"ReplicatedStorage/Assets/Temp/ViewModels")
+        addRoot(Workspace,"Workspace")
+        addRoot(ReplicatedStorage,"ReplicatedStorage")
+        local equipped={}
+        if first then
+          local prefix=player.Name.." - "
+          for _,rig in ipairs(first:GetChildren()) do
+            if rig:IsA("Model") and rig.Name:sub(1,#prefix)==prefix and rig:FindFirstChild("ItemVisual") then
+              local suffix=rig.Name:sub(#prefix+1)
+              equipped[#equipped+1]=cleanName(suffix)
+            end
+          end
+        end
+        report.catalog={
+          standard=names(standard,250),skins=allSkins,projectiles=names(projectiles,250),
+          throwables=names(throwables,250),activeFirstPerson=equipped,
+          gunModulePresent=scripts and scripts:FindFirstChild("Modules")
+            and scripts.Modules:FindFirstChild("ItemTypes")
+            and scripts.Modules.ItemTypes:FindFirstChild("Gun")~=nil or false
+        }
         local backpack=player and player:FindFirstChildOfClass("Backpack")
         if backpack then roots[#roots+1]={instance=backpack,label="LocalBackpack"} end
         local character=player and player.Character
@@ -81,7 +144,7 @@ return function(env)
               visited+=1;total+=1
               local isScript=obj:IsA("LuaSourceContainer")
               local isRemote=obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")
-              if not isScript and not isRemote then
+              if not isRemote then
                 local match=hasAny(obj.Name,words)
                 local entry={path=item.path,class=obj.ClassName,attributes={}}
                 local success,attrs=pcall(function()return obj:GetAttributes()end)
@@ -122,7 +185,7 @@ return function(env)
   end
   local tab=ui:CreateTab("Weapon Diagnostics",4483345998)
   tab:CreateSection("Client-visible diagnostics")
-  tab:CreateLabel("Workspace and ReplicatedStorage; capped, local export; no upload.")
+  tab:CreateLabel("All local weapon/skin/projectile roots plus controllers; capped, local export; no upload.")
   tab:CreateButton({Name="Scan and export weapon data",Callback=scan})
   return {Stop=function() end}
 end

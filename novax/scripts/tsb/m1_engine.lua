@@ -10,6 +10,7 @@ return function(options)
   local send=assert(options.SendInput,"SendInput callback is required")
   local stopped=false
   local running=false
+  local runGeneration=0
   local delaySeconds=0.32
   local sentCount=0
   local acceptedCount=0
@@ -93,7 +94,7 @@ return function(options)
     if options.CanRun and not options.CanRun() then return false end
     return true
   end
-  function Status()
+  local function Status()
     return string.format(
       "M1 input: %s | attempts: %d | dispatched: %d | BaseM1: %d styles / %d IDs | last animation: %s%s",
       running and "ON" or "OFF",sentCount,acceptedCount,
@@ -106,8 +107,10 @@ return function(options)
     if stopped then return false,"Engine was unloaded" end
     if running then return true end
     running=true
+    runGeneration+=1
+    local generation=runGeneration
     task.spawn(function()
-      while running and not stopped do
+      while running and not stopped and runGeneration==generation do
         if playerCanStrike() then
           sentCount+=1
           local ok=send("MouseButton1",true)
@@ -115,14 +118,17 @@ return function(options)
           local released=send("MouseButton1",false)
           if ok and released then acceptedCount+=1 end
         end
-        task.wait(delaySeconds)
+        if running and runGeneration==generation then task.wait(delaySeconds) end
       end
-      pcall(function()send("MouseButton1",false)end)
+      if runGeneration==generation then
+        pcall(function()send("MouseButton1",false)end)
+      end
     end)
     return true
   end
   function api:Stop()
     running=false
+    runGeneration+=1
     pcall(function()send("MouseButton1",false)end)
   end
   function api:SetInterval(value)

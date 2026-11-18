@@ -5,8 +5,8 @@
 local REV="2df577a270a78151c9afa2f7b7b9340e45a38f4d"
 local VISUAL_REV="b93030ffa9dd71735c208293ff59d15cb63c4c59"
 local DIAG_REV="403437264c2067d8f1fbd4c64fb53fadb1b78d65"
-local FIRE_REV="863f28781089235a47e0df54cf28c52ba0b7ab4f"
-local CORE_REV="7d1f117e9d25d7cbb47f17ebdd59f007ecc34605"
+local FIRE_REV="30b4f0d542cc71fafeb34910751f3c81a9828553"
+local CORE_REV="79bbda7d58600b799b5fa22f9b8551be1901d540"
 local BASE="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/novax/v1/"
 local env=(getgenv and getgenv()) or _G
 if type(loadstring)~="function" then
@@ -322,14 +322,14 @@ local okControls,controlsError=pcall(function()
   end)
   local tab=ui:CreateTab("Weapon Controls",4483345998)
   tab:CreateSection("Fast Fire")
-  tab:CreateLabel("Targets local Gun._shoot_cooldown (x1-x10). Server firing limits may still apply.")
+  tab:CreateLabel("Targets local Gun._shoot_cooldown (x1-x20). Server firing limits may still apply.")
   tab:CreateToggle({Name="Fast Fire",CurrentValue=false,Callback=function(v)
     fast=v;nextShot=0
     if rapidModule then rapidModule:SetActive(v) end
   end})
-  tab:CreateSlider({Name="Fire speed multiplier (x)",Range={1,10},Increment=1,CurrentValue=4,
+  tab:CreateSlider({Name="Fire speed multiplier (x)",Range={1,20},Increment=1,CurrentValue=4,
     Callback=function(v)
-      rate=math.clamp(tonumber(v) or 4,1,10)
+      rate=math.clamp(tonumber(v) or 4,1,20)
       if rapidModule then rapidModule:SetMultiplier(rate) end
     end})
   tab:CreateButton({Name="Check Fast Fire status",Callback=function()

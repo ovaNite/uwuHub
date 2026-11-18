@@ -15,8 +15,13 @@ return function(env)
   for k,v in pairs(defaults) do if type(state[k])~=type(v) then state[k]=v end end
   local alive=true
   local categories={"Skins","Wraps","Charms","Finishers","Emotes","Other"}
-  local categoryNames={skin="Skins",wrap="Wraps",charm="Charms",
-    finisher="Finishers",emote="Emotes"}
+  local categoryNames={
+    skin="Skins",weaponskin="Skins",
+    wrap="Wraps",wrapping="Wraps",weaponwrap="Wraps",weaponwrapping="Wraps",
+    charm="Charms",weaponcharm="Charms",
+    finisher="Finishers",finishingmove="Finishers",
+    emote="Emotes",animation="Emotes",
+  }
   local catalog,byName,assetFolders={}, {}, {}
   local selectedLabels={}
   local pageSize=36
@@ -54,7 +59,8 @@ return function(env)
     for name,entry in pairs(all) do
       if type(name)=="string" and type(entry)=="table" then
         local kind=tostring(rawget(entry,"Type") or "")
-        local category=categoryNames[string.lower(kind)] or "Other"
+        local normalizedKind=string.lower(kind):gsub("[^%a]","")
+        local category=categoryNames[normalizedKind] or "Other"
         local obj={name=name,type=kind,category=category,
           weapon=tostring(rawget(entry,"ItemName") or ""),
           rarity=tostring(rawget(entry,"Rarity") or "Unknown"),

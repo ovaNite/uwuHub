@@ -3,11 +3,13 @@
 -- Loads original 7466-line template as UI + main core, plus optional
 -- 90Hz weather, compatibility checker and integrated Weather/Diagnostics tabs.
 local REV="2df577a270a78151c9afa2f7b7b9340e45a38f4d"
+local UI_REV="55e2d649d20373ec445ac66fc49bddd494cadab2"
+local GAMES_REV="c242442b8977b7dd6f156678cf04a12a0946a9c3"
 local VISUAL_REV="c290c9998ce798a2720f111b19f7885e10b0d695"
 local DIAG_REV="403437264c2067d8f1fbd4c64fb53fadb1b78d65"
 local FIRE_REV="30b4f0d542cc71fafeb34910751f3c81a9828553"
 local DROPS_REV="f7cc67f6488dbf580f8a30329264ef16924a5bac"
-local CORE_REV="2b780a9aca0522e91604f10fad285a24265d5f75"
+local CORE_REV="3f5e48899c4203e76e3a8b1303c032b91f111db3"
 local EQUIPMENT_REV="44a79be79afc1f1f7789cb701f8f0c738989447a"
 local GUI_REV="663d8a59cbf8d87023685cf8f3a77d8a0f66bcf4"
 local SPREAD_REV="8bfaaaa7fac652ecc486baf20b983f22cd7b98d3"
@@ -18,7 +20,11 @@ if type(loadstring)~="function" then
 end
 local function load(relative)
   local url = relative=="core/legacy.lua" and ("https://raw.githubusercontent.com/ovaNite/uwuHub/"..CORE_REV.."/novax/v1.1/core/legacy.lua") or relative=="modules/visual_studio.lua" and ("https://raw.githubusercontent.com/ovaNite/uwuHub/"..VISUAL_REV.."/novax/v1.1/modules/visual_studio.lua") or (BASE..relative)
-  if relative=="modules/weapon_diagnostics.lua" then
+  if relative=="ui/NovaPremiumUI.lua" then
+    url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..UI_REV.."/novax/v1.1/ui/NovaPremiumUI.lua"
+  elseif relative=="modules/games_hub.lua" then
+    url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..GAMES_REV.."/novax/v1.1/modules/games_hub.lua"
+  elseif relative=="modules/weapon_diagnostics.lua" then
     url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..DIAG_REV.."/novax/v1.1/modules/weapon_diagnostics.lua"
   elseif relative=="modules/rapid_fire.lua" then
     url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..FIRE_REV.."/novax/v1.1/modules/rapid_fire.lua"
@@ -101,6 +107,18 @@ end
 -- The original 5000+ lines of aim, ESP, movement, trigger, config and GUI.
 execute("core/legacy.lua",true)
 local baseCleanup=env.NX_CLEANUP
+-- Second top-level workspace: Main | Games, repository thumbnails and editor.
+local hubFactory=execute("modules/games_hub.lua",false)
+local gamesHubModule=nil
+if type(hubFactory)=="function" then
+  local ok,result=pcall(hubFactory,env)
+  if ok and type(result)=="table" then gamesHubModule=result
+  else
+    local message="Games Hub: "..tostring(result)
+    table.insert(env.NovaXRelease.Errors,message)
+    warn("[NovaX] "..message)
+  end
+end
 -- Weather is modular and starts in OFF mode, so nothing expensive begins
 -- until the user activates Rain or Snow in the premium GUI.
 local weatherFactory=execute("modules/weather.lua",false)
@@ -461,6 +479,7 @@ env.NX_CONFIG_APPLY=function()
   end
 end
 env.NX_CLEANUP=function()
+  if gamesHubModule and gamesHubModule.Stop then pcall(gamesHubModule.Stop) end
   if equipmentModule and equipmentModule.Stop then pcall(equipmentModule.Stop) end
   env.NovaXChooseSkin=nil
   if controlsModule then pcall(controlsModule.Stop) end

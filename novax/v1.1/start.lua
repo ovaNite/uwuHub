@@ -7,7 +7,7 @@ local UI_REV="55e2d649d20373ec445ac66fc49bddd494cadab2"
 local GAMES_REV="2c397d327803d70a7df17b359ace24d806bbdf9d"
 local VISUAL_REV="c290c9998ce798a2720f111b19f7885e10b0d695"
 local DIAG_REV="403437264c2067d8f1fbd4c64fb53fadb1b78d65"
-local FIRE_REV="30b4f0d542cc71fafeb34910751f3c81a9828553"
+local FIRE_REV="861029ed9e50ac85530fad1656fc706b4409198a"
 local DROPS_REV="f7cc67f6488dbf580f8a30329264ef16924a5bac"
 local CORE_REV="3f5e48899c4203e76e3a8b1303c032b91f111db3"
 local EQUIPMENT_REV="44a79be79afc1f1f7789cb701f8f0c738989447a"
@@ -204,7 +204,7 @@ local okControls,controlsError=pcall(function()
   local settings=assert(env.NX_STATE,"NovaX state unavailable")
   local fast=settings.NovaXFastFire==true
   local muted=settings.NovaXNoShootSound==true
-  local rate=math.floor(math.clamp(tonumber(settings.NovaXFastFireMultiplier) or 4,1,20))
+  local rate=math.floor(math.clamp(tonumber(settings.NovaXFastFireMultiplier) or 4,1,100))
   local volume=math.clamp(tonumber(settings.NovaXShotVolume) or 100,0,100)
   local includeShared=settings.NovaXSharedShotSounds~=false
   local includeItemSounds=settings.NovaXWeaponEffectSounds~=false
@@ -380,16 +380,16 @@ local okControls,controlsError=pcall(function()
   end)
   local tab=ui:CreateTab("Weapon Controls",4483345998)
   tab:CreateSection("Fast Fire")
-  tab:CreateLabel("Targets local Gun._shoot_cooldown (x1-x20). Server firing limits may still apply.")
+  tab:CreateLabel("Targets local Gun._shoot_cooldown (x1-x100). Server firing limits may still apply.")
   local controlRefs={}
   local function record(key,control) controlRefs[key]=control;return control end
   record("NovaXFastFire",tab:CreateToggle({Name="Fast Fire",CurrentValue=fast,Callback=function(v)
     fast=v==true;settings.NovaXFastFire=fast;nextShot=0
     if rapidModule then rapidModule:SetActive(fast) end
   end}))
-  record("NovaXFastFireMultiplier",tab:CreateSlider({Name="Fire speed multiplier (x)",Range={1,20},Increment=1,CurrentValue=rate,
+  record("NovaXFastFireMultiplier",tab:CreateSlider({Name="Fire speed multiplier (x)",Range={1,100},Increment=1,CurrentValue=rate,
     Callback=function(v)
-      rate=math.floor(math.clamp(tonumber(v) or 4,1,20))
+      rate=math.floor(math.clamp(tonumber(v) or 4,1,100))
       settings.NovaXFastFireMultiplier=rate
       if rapidModule then rapidModule:SetMultiplier(rate) end
     end}))
@@ -424,7 +424,7 @@ local okControls,controlsError=pcall(function()
     if not active then return end
     fast=settings.NovaXFastFire==true
     muted=settings.NovaXNoShootSound==true
-    rate=math.floor(math.clamp(tonumber(settings.NovaXFastFireMultiplier) or 4,1,20))
+    rate=math.floor(math.clamp(tonumber(settings.NovaXFastFireMultiplier) or 4,1,100))
     volume=math.clamp(tonumber(settings.NovaXShotVolume) or 100,0,100)
     includeShared=settings.NovaXSharedShotSounds~=false
     includeItemSounds=settings.NovaXWeaponEffectSounds~=false

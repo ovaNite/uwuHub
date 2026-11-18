@@ -166,7 +166,7 @@ return function(ctx)
     if type(loadstring)~="function" then return end
     local url="https://raw.githubusercontent.com/ovaNite/uwuHub/main/novax/scripts/tsb/combos.lua"
     local ok,result=pcall(function()
-      local source=game:HttpGet(url,true)
+      local source=game:HttpGet(url,false)
       local fn,err=loadstring(source)
       if not fn then error(err) end
       return fn()

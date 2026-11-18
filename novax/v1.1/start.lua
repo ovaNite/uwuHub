@@ -7,7 +7,8 @@ local VISUAL_REV="c290c9998ce798a2720f111b19f7885e10b0d695"
 local DIAG_REV="403437264c2067d8f1fbd4c64fb53fadb1b78d65"
 local FIRE_REV="30b4f0d542cc71fafeb34910751f3c81a9828553"
 local DROPS_REV="f7cc67f6488dbf580f8a30329264ef16924a5bac"
-local CORE_REV="1fd99c4c3ac23e6588997f58af12c7ffc3db5fd5"
+local CORE_REV="8f224350b8bcf07fdf06829367476be235f7c3a8"
+local COSMETIC_REV="bdd537628bfdf237f64cdffcff9641c72a90685c"
 local GUI_REV="663d8a59cbf8d87023685cf8f3a77d8a0f66bcf4"
 local SPREAD_REV="8bfaaaa7fac652ecc486baf20b983f22cd7b98d3"
 local BASE="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/novax/v1/"
@@ -27,6 +28,8 @@ local function load(relative)
     url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..SPREAD_REV.."/novax/v1.1/modules/no_spread.lua"
   elseif relative=="modules/gui_extensions.lua" then
     url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..GUI_REV.."/novax/v1.1/modules/gui_extensions.lua"
+  elseif relative=="modules/cosmetic_preview.lua" then
+    url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..COSMETIC_REV.."/novax/v1.1/modules/cosmetic_preview.lua"
   end
   local ok,result=pcall(function()return game:HttpGet(url,true)end)
   if not ok or type(result)~="string" or #result<100 then
@@ -492,19 +495,15 @@ local okModels,modelError=pcall(function()
     local models=assets and assets:FindFirstChild("ViewModels")
     local modules=storage:FindFirstChild("Modules")
     local library=modules and modules:FindFirstChild("CosmeticLibrary")
-    if not models or not library or type(getloadedmodules)~="function" then return false end
-    local ready=false
-    local ok,loaded=pcall(getloadedmodules)
-    if ok and type(loaded)=="table" then for _,v in ipairs(loaded) do if v==library then ready=true;break end end end
-    if not ready then return false end
+    if not models or not library then return false end
+    -- CosmeticLibrary is a local catalogue module; do not refuse discovery
+    -- just because the executor has no getloadedmodules() function.
     local success,lib=pcall(require,library)
     local all=success and type(lib)=="table" and rawget(lib,"Cosmetics")
     if type(all)~="table" then return false end
     local indexed={}
-    for _,folder in ipairs(models:GetChildren()) do
-      for _,model in ipairs(folder:GetChildren()) do
-        if model:IsA("Model") and not indexed[model.Name] then indexed[model.Name]=model end
-      end
+    for _,model in ipairs(models:GetDescendants()) do
+      if model:IsA("Model") and not indexed[model.Name] then indexed[model.Name]=model end
     end
     local nextCatalog,nextWeapons,nextSkinWeapons,nextSkinIcons={},{},{},{}
     for name,entry in pairs(all) do
@@ -618,6 +617,7 @@ local okModels,modelError=pcall(function()
     clear();retryAt=0
     if selectedWeapon==weapon then refreshSkins() end
   end
+  env.NovaXChooseSkin=chooseSkin
   skinDropdown=tab:CreateDropdown({Name="Skin",Options={"Original"},CurrentOption={"Original"},Callback=function(v)
     local label=type(v)=="table" and tostring(v[1]) or tostring(v)
     chooseSkin(selectedWeapon,labels[label])
@@ -790,7 +790,7 @@ local okModels,modelError=pcall(function()
     if save and configState then configState.NovaXShopPreview=shopEnabled end
     if shopEnabled then refreshShop() else clearShop() end
   end
-  shopToggle=tab:CreateToggle({Name="Unlock Weapons",CurrentValue=shopEnabled,Callback=function(v)
+  shopToggle=tab:CreateToggle({Name="Local cosmetic choices (no real unlock)",CurrentValue=shopEnabled,Callback=function(v)
     setShopEnabled(v,true)
   end})
   if shopEnabled then refreshShop() end
@@ -875,12 +875,26 @@ if not okModels then
   table.insert(env.NovaXRelease.Errors,"Skin Changer: "..tostring(modelError))
   warn("[NovaX] Skin Changer: "..tostring(modelError))
 end
+-- Local catalogue previews of all known cosmetic entries (including
+-- wraps/charms unavailable to the game's normal owned-only UI).
+local cosmeticFactory=execute("modules/cosmetic_preview.lua",false)
+local cosmeticModule=nil
+if type(cosmeticFactory)=="function" then
+  local ok,result=pcall(cosmeticFactory,env)
+  if ok and type(result)=="table" then cosmeticModule=result
+  else
+    local message="Cosmetic Preview: "..tostring(result)
+    table.insert(env.NovaXRelease.Errors,message)
+    warn("[NovaX] "..message)
+  end
+end
 -- Called after the original Config Manager loads a profile. All extension
 -- modules then synchronize their runtime and visible controls from NX_STATE.
 env.NX_CONFIG_APPLY=function()
   if controlsModule and controlsModule.ApplyState then pcall(controlsModule.ApplyState) end
   if dropsModule and dropsModule.ApplyState then pcall(dropsModule.ApplyState) end
   if modelControls and modelControls.ApplyState then pcall(modelControls.ApplyState) end
+  if cosmeticModule and cosmeticModule.ApplyState then pcall(cosmeticModule.ApplyState) end
   if type(visualModule)=="table" and visualModule.ApplyState then pcall(visualModule.ApplyState) end
   if type(env.NovaXWeatherControls)=="table" and env.NovaXWeatherControls.ApplyState then
     pcall(env.NovaXWeatherControls.ApplyState)
@@ -888,6 +902,8 @@ env.NX_CONFIG_APPLY=function()
 end
 env.NX_CLEANUP=function()
   if modelControls then pcall(modelControls.Stop) end
+  if cosmeticModule and cosmeticModule.Stop then pcall(cosmeticModule.Stop) end
+  env.NovaXChooseSkin=nil
   if controlsModule then pcall(controlsModule.Stop) end
   if dropsModule and type(dropsModule.Stop)=="function" then pcall(dropsModule.Stop,dropsModule) end
   if noSpreadModule and type(noSpreadModule.Stop)=="function" then pcall(noSpreadModule.Stop,noSpreadModule) end

@@ -1677,6 +1677,9 @@ function isVisibleCached(part)
 end
 
 local getClosestDbgAt = 0
+-- Assigned after spawn-zone definitions are loaded. Fail closed until then.
+local safeRageCombatTarget=function() return false end
+local rageCombatActive=function() return false end
 function getClosest(fov, teamCheck, maxDist, checkVis, forceHead, preferredPart)
   updateCache()
   
@@ -1698,7 +1701,8 @@ function getClosest(fov, teamCheck, maxDist, checkVis, forceHead, preferredPart)
         local char = player.Character
         if not char then
           why.noChar = why.noChar + 1
-        elseif not isEnemy(player, teamCheck) then
+        elseif not isEnemy(player, teamCheck)
+          or (STATE.RageBot and not safeRageCombatTarget(player)) then
           why.notEnemy = why.notEnemy + 1
         else
           local hum = char:FindFirstChildOfClass("Humanoid")
@@ -2208,7 +2212,8 @@ function isRageTargetValid(t)
   end
   
   local player = Players:GetPlayerFromCharacter(t.Parent)
-  if not player or not isAlive(player) or not isEnemy(player, STATE.AimTeamCheck) then
+  if not player or not isAlive(player) or not isEnemy(player, STATE.AimTeamCheck)
+    or not safeRageCombatTarget(player) then
     return false
   end
   
@@ -2311,6 +2316,13 @@ function setupCombat()
     
     pcall(function()
       if STATE.RageBot then
+        if not rageCombatActive() then
+          rageTarget=nil
+          rageLockedPlayer=nil
+          rageNextShotAt=0
+          restoreRageWeaponLock()
+          return
+        end
         aimTarget = nil
         autoAimTarget = nil
         autoAimSmoothedPos = nil
@@ -3037,6 +3049,14 @@ local function safeCombatTeleportTarget(player)
   if mine==theirs then return false,"teammate" end
   if hasSpawnProtection and hasSpawnProtection(player) then return false,"spawn protection" end
   return true,"confirmed combat"
+end
+rageCombatActive=function()
+  local root=getRoot()
+  return root~=nil and isRoundStarted() and not inLobbySpawnZone(root.Position)
+end
+safeRageCombatTarget=function(player)
+  local allowed=safeCombatTeleportTarget(player)
+  return allowed==true
 end
 --  TELEPORT + AUTO BACKSTAB
 local tpDropdownRef = nil

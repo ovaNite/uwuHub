@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "repository": "ovaNite/uwuHub",
+  "note": "Fallback manifest for clients with limited GitHub API access. Live API discovery finds new game folders automatically.",
+  "games": [
+    {
+      "id": "tsb",
+      "name": "The Strongest Battlegrounds",
+      "description": "TSB • Combo Studio, editable character profiles and input recording",
+      "placeIds": [
+        10449761463
+      ],
+      "universeId": 3808081382,
+      "script": "loader.lua"
+    }
+  ]
+}

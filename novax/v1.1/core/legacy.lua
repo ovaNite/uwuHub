@@ -306,6 +306,8 @@ cleanup = function()
       gv.NX_XENO_LOADING = nil
       gv.NX_XENO = nil
       gv.NX_CLEANUP = nil
+      gv.NX_AUTOCONFIG = nil
+      gv.NX_CONFIG_APPLY = nil
     end
   end)
 end
@@ -386,6 +388,62 @@ local STATE = {
   
   NoSpread = false,
   Wallbang = false,
+  -- Shared config settings for modules loaded AFTER this core.
+  NovaXFastFire = false,
+  NovaXFastFireMultiplier = 4,
+  NovaXNoShootSound = false,
+  NovaXSharedShotSounds = true,
+  NovaXWeaponEffectSounds = true,
+  NovaXShotVolume = 100,
+  NovaXAutoHeal = false,
+  NovaXAutoAmmo = false,
+  NovaXAutoDropRemote = true,
+  NovaXAutoDropNavigate = false,
+  NovaXSkinSelections = "{}",
+  NovaXSkinConfigFilter = "{}",
+  NovaXShopPreview = false,
+  NovaXSkinOffsetX = 0,
+  NovaXSkinOffsetY = 0,
+  NovaXSkinOffsetZ = 0,
+  NovaXSkinRotationX = 0,
+  NovaXSkinRotationY = 0,
+  NovaXSkinRotationZ = 0,
+  NovaXWeatherMode = "OFF",
+  NovaXWeatherRain = 55,
+  NovaXWeatherSnow = 65,
+  NovaXWeatherQuality = "BALANCED",
+  NovaXWeatherAdaptive = true,
+  NovaXWeatherSnowFX = true,
+  NovaXWeatherRainFX = true,
+  NovaXWeatherWetFloor = true,
+  NovaXWeatherCameraWet = true,
+  NovaXWeatherSound = true,
+  NovaXWeatherStorm = false,
+  NovaXWorldEnabled = false,
+  NovaXWorldSaturation = 0,
+  NovaXWorldContrast = 0,
+  NovaXWorldTint = "Neutral",
+  NovaXWorldBloom = false,
+  NovaXWorldBloomIntensity = 30,
+  NovaXWorldRays = false,
+  NovaXWorldRaysStrength = 10,
+  NovaXWorldDepth = false,
+  NovaXWorldDepthFocus = 50,
+  NovaXWorldDepthBlur = 15,
+  NovaXWorldPerformance = false,
+  NovaXWorldBrightnessEnabled = false,
+  NovaXWorldBrightness = 2,
+  NovaXWorldExposure = 0,
+  NovaXWorldFogEnabled = false,
+  NovaXWorldFogEnd = 1000,
+  NovaXWorldAmbientEnabled = false,
+  NovaXWorldAmbient = 128,
+  NovaXWorldShadowsEnabled = false,
+  NovaXWorldShadows = true,
+  NovaXWorldClockEnabled = false,
+  NovaXWorldClock = 14,
+  NovaXWorldFovEnabled = false,
+  NovaXWorldFov = 70,
   
   FullBright = false,
   NoFog = false,
@@ -648,6 +706,77 @@ function listConfigNames()
 end
 
 ensureConfigFolder()
+
+-- Track the selected config separately from normal *.json config files.
+-- Never overwrite a user's saved config during startup.
+local AUTO_CONFIG_FILE = CONFIG_FOLDER.."/.autoload"
+local autoConfigName=nil
+local autoConfigStatus="No saved config found"
+local function rememberAutoConfig(name)
+  local clean=sanitizeConfigName(name)
+  autoConfigName=clean
+  if type(writefile)=="function" then
+    local ok,err=pcall(function()
+      ensureConfigFolder()
+      writefile(AUTO_CONFIG_FILE,clean)
+    end)
+    if not ok then
+      warn("[NovaX Config] Cannot remember auto-load selection: "..tostring(err))
+    end
+  end
+end
+local function clearAutoConfig()
+  autoConfigName=nil
+  if type(delfile)=="function" and type(isfile)=="function" then
+    pcall(function() if isfile(AUTO_CONFIG_FILE) then delfile(AUTO_CONFIG_FILE) end end)
+  end
+end
+local function bootAutoConfig()
+  if type(readfile)~="function" or type(isfile)~="function" then
+    autoConfigStatus="Executor has no readfile/isfile; auto-load unavailable"
+    return
+  end
+  local preferred
+  local ok,remembered=pcall(function()
+    return isfile(AUTO_CONFIG_FILE) and readfile(AUTO_CONFIG_FILE) or nil
+  end)
+  if ok and type(remembered)=="string" and remembered~="" then
+    preferred=sanitizeConfigName(remembered)
+  end
+  local options={}
+  if preferred then options[#options+1]=preferred end
+  options[#options+1]="default"
+  local names=listConfigNames()
+  for _,name in ipairs(names) do options[#options+1]=name end
+  local checked={}
+  for _,name in ipairs(options) do
+    local candidate=sanitizeConfigName(name)
+    if not checked[candidate] then
+      checked[candidate]=true
+      local path=getConfigPath(candidate)
+      local exists,hasFile=pcall(isfile,path)
+      if exists and hasFile then
+        local loaded,message=loadConfig(candidate)
+        if loaded then
+          autoConfigName=candidate
+          autoConfigStatus="Auto-loaded: "..candidate
+          print("[NovaX Config] "..autoConfigStatus)
+          return
+        end
+        warn("[NovaX Config] "..candidate..": "..tostring(message))
+      end
+    end
+  end
+  autoConfigStatus="No readable saved config found"
+end
+bootAutoConfig()
+local configGlobal=(getgenv and getgenv()) or _G
+configGlobal.NX_AUTOCONFIG={
+  Status=function() return autoConfigStatus end,
+  Selected=function() return autoConfigName end,
+  Set=function(name) rememberAutoConfig(name);autoConfigStatus="Selected: "..autoConfigName end,
+  Clear=clearAutoConfig,
+}
 
 if not SUPPORT.MetaHook and tostring(STATE.SilentAimMode or "No Hook") == "Hook" then
   nxWarn("[NovaX] Meta-Hook fehlt: Silent/Wallbang kann je nach Executor ohne Wirkung bleiben")
@@ -5582,15 +5711,48 @@ end
     applyDeviceSpoof()
     syncStateControlsFromState()
     refreshTPDropdown()
+    local globals=(getgenv and getgenv()) or _G
+    if type(globals.NX_CONFIG_APPLY)=="function" then
+      local ok,err=pcall(globals.NX_CONFIG_APPLY)
+      if not ok then warn("[NovaX Config] External sync: "..tostring(err)) end
+    end
   end
-  
+
   if Rayfield.CreateConfigManager then
-    Rayfield:CreateConfigManager(Win, STATE, {
+    local manager=Rayfield:CreateConfigManager(Win, STATE, {
       Folder = CONFIG_FOLDER,
-      DefaultName = "default",
+      DefaultName = autoConfigName or "default",
       TabName = "Configs",
       Sync = syncAfterConfigLoad,
     })
+    if type(manager)=="table" then
+      -- Wrapping existing manager methods also tracks manual Save, Load,
+      -- Rename and Delete actions without altering NovaPremiumUI itself.
+      local save,load,rename,delete=manager.Save,manager.Load,manager.Rename,manager.Delete
+      function manager:Save(name)
+        local ok,result=save(self,name)
+        if ok then rememberAutoConfig(result);autoConfigStatus="Saved and selected: "..tostring(result) end
+        return ok,result
+      end
+      function manager:Load(name)
+        local ok,result=load(self,name)
+        if ok then rememberAutoConfig(result);autoConfigStatus="Loaded: "..tostring(result) end
+        return ok,result
+      end
+      function manager:Rename(oldName,newName)
+        local ok,result=rename(self,oldName,newName)
+        if ok then rememberAutoConfig(result);autoConfigStatus="Renamed and selected: "..tostring(result) end
+        return ok,result
+      end
+      function manager:Delete(name)
+        local ok,result=delete(self,name)
+        if ok and autoConfigName==sanitizeConfigName(result) then
+          clearAutoConfig()
+          autoConfigStatus="Deleted selection; next start uses default/first config"
+        end
+        return ok,result
+      end
+    end
   end
   
   addConnection("input", UserInputService.InputBegan:Connect(function(i, gp)

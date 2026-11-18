@@ -272,8 +272,18 @@ return function(ctx)
     local ready,engine=pcall(factory,{
       SendInput=sendInput,
       CanRun=function()
-        return live and not recording and not playing
-          and (not ctx or type(ctx.IsRunning)~="function" or ctx.IsRunning())
+        if not live or recording or playing then return false end
+        if ctx and type(ctx.IsRunning)=="function" and not ctx.IsRunning() then return false end
+        if gui and gui.Enabled and panel.Visible then
+          local pos=UIS:GetMouseLocation()
+          local start=panel.AbsolutePosition
+          local sz=panel.AbsoluteSize
+          if pos.X>=start.X and pos.X<=start.X+sz.X
+             and pos.Y>=start.Y and pos.Y<=start.Y+sz.Y then
+            return false
+          end
+        end
+        return true
       end,
     })
     if ready and type(engine)=="table" then

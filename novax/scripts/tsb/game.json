@@ -1,0 +1,16 @@
+{
+  "id": "tsb",
+  "name": "The Strongest Battlegrounds",
+  "description": "TSB • Combo Studio, editable character profiles and input recording",
+  "placeIds": [
+    10449761463
+  ],
+  "universeId": 3808081382,
+  "script": "loader.lua",
+  "tags": [
+    "Battlegrounds",
+    "Combos",
+    "Utility"
+  ],
+  "version": "0.1.0"
+}

@@ -115,7 +115,7 @@ return function(env)
     state.last=setmetatable({}, {__mode="k"})
   end
   function api:SetMultiplier(value)
-    state.multiplier=math.floor(math.clamp(tonumber(value) or 4,1,20))
+    state.multiplier=math.floor(math.clamp(tonumber(value) or 4,1,100))
     state.last=setmetatable({}, {__mode="k"})
   end
   function api:Status()

@@ -412,6 +412,16 @@ return function(env)
       games=found
       lastRefresh=os.clock()
       updateBusy=false
+      if not current and state.NovaXGameSelected~="" then
+        for _,entry in ipairs(games) do
+          if entry.id==state.NovaXGameSelected then
+            current=entry
+            currentName.Text=entry.name
+            statusName.Text=entry.description
+            break
+          end
+        end
+      end
       renderGames()
       if #found==0 then
         emit("No game metadata found. GitHub API: "..tostring(apiError or "empty"),colors.red)
@@ -556,8 +566,17 @@ return function(env)
   customBtn.MouseButton1Click:Connect(function()
     current=nil
     selectedKind="custom"
-    codeBox.Text=editorDefault
-    sourceText=editorDefault
+    local draft=editorDefault
+    if type(readfile)=="function" and type(isfile)=="function" then
+      pcall(function()
+        if isfile("NovaX/Games/editor_draft.lua") then
+          local text=readfile("NovaX/Games/editor_draft.lua")
+          if type(text)=="string" and #text<220000 then draft=text end
+        end
+      end)
+    end
+    codeBox.Text=draft
+    sourceText=draft
     codeDirty=false
     currentName.Text="CUSTOM LUA EDITOR"
     statusName.Text="Your own Luau script • manual execution"
@@ -588,7 +607,23 @@ return function(env)
       return false
     end,
   }
-  return {Stop=function()
+  return {
+    ApplyState=function()
+      if not live then return end
+      local wanted=state.NovaXGameSelected
+      if type(wanted)=="string" then
+        for _,entry in ipairs(games) do
+          if entry.id==wanted then
+            current=entry
+            selectedKind="repo"
+            currentName.Text=entry.name
+            statusName.Text=entry.description
+            return
+          end
+        end
+      end
+    end,
+    Stop=function()
     if not live then return end
     stopSession()
     live=false

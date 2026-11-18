@@ -4365,6 +4365,9 @@ local function createHeadGuardOrbit(char)
   headGuardOrbit.camera=camera
   headGuardOrbit.folder=folder
   local count=#HEAD_GUARD_PART_NAMES
+  -- Four distinct height levels encircle the head, including visibly ABOVE
+  -- and BELOW it. This moves client-only visual copies, not real hitboxes.
+  local levels={3.25,1.25,-1.25,-3.25}
   for i,name in ipairs(HEAD_GUARD_PART_NAMES) do
     local original=char:FindFirstChild(name)
     if original and original:IsA("BasePart") then
@@ -4390,9 +4393,10 @@ local function createHeadGuardOrbit(char)
         clone.Parent=folder
         headGuardOrbit.parts[#headGuardOrbit.parts+1]={
           original=original,visual=clone,
-          slot=(i-1)/count*math.pi*2,
-          radiusOffset=((i-1)%3)*0.22,
-          height=math.clamp((original.Position.Y-head.Position.Y)*0.28,-1.5,0.8),
+          slot=(math.floor((i-1)/4)/math.ceil(count/4))*math.pi*2
+            + ((i-1)%4)*0.45,
+          radiusOffset=((i-1)%3)*0.24,
+          height=levels[((i-1)%4)+1],
           index=i,
         }
         headGuardOrbit.originals[original]=original.LocalTransparencyModifier
@@ -4422,16 +4426,21 @@ local function stepHeadGuardOrbit(dt)
   headGuardOrbit.angle+=math.clamp(tonumber(dt) or 0,0,0.05)*speed*1.8
   local phase=headGuardOrbit.angle
   local pivot=CFrame.new(head.Position)
+  -- First-person cameras sit at/near Head. Never draw the orbit into the
+  -- user's weapon view; keep the effect third-person only.
+  local firstPerson=(camera.CFrame.Position-head.Position).Magnitude<2.5
+    or LocalPlayer.CameraMode==Enum.CameraMode.LockFirstPerson
   for _,entry in ipairs(headGuardOrbit.parts) do
     local original,visual=entry.original,entry.visual
     if original.Parent and visual.Parent then
-      -- Preserve the head at the real character's position. Every BODY part
-      -- circles clockwise in its own slot, spread across the orbit layers.
+      -- The actual head stays put. The clones are hidden in first person and
+      -- resume their 3D orbit as soon as the camera returns to third person.
       if original.LocalTransparencyModifier<0.999 then
         original.LocalTransparencyModifier=1
       end
+      visual.LocalTransparencyModifier=firstPerson and 1 or 0
       local angle=phase+entry.slot
-      local bob=math.sin(phase*1.5+entry.index*0.8)*0.28
+      local bob=math.sin(phase*1.5+entry.index*0.8)*0.18
       local r=radius+entry.radiusOffset
       local orbit=pivot*CFrame.Angles(0,-angle,0)
         *CFrame.new(r,entry.height+bob,0)
@@ -5426,6 +5435,7 @@ end
         STATE.AntiHitGuardDodge = v
       end,
     }))
+    MT:CreateLabel("Head Guard body orbit: third-person only; local visuals cannot block server hits.")
     bindStateControl("AntiHitOrbitRadius", c:CreateSlider({
       Name = "Head Guard: Orbit Radius",
       Range = {1.5,6},

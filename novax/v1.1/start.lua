@@ -7,8 +7,8 @@ local VISUAL_REV="c290c9998ce798a2720f111b19f7885e10b0d695"
 local DIAG_REV="403437264c2067d8f1fbd4c64fb53fadb1b78d65"
 local FIRE_REV="30b4f0d542cc71fafeb34910751f3c81a9828553"
 local DROPS_REV="f7cc67f6488dbf580f8a30329264ef16924a5bac"
-local CORE_REV="96a64cff7a201a423f31811f7ef30e8f94c5b8c7"
-local EQUIPMENT_REV="e8f386a5c780531c13eb51c2a04971be53216b8f"
+local CORE_REV="2b780a9aca0522e91604f10fad285a24265d5f75"
+local EQUIPMENT_REV="44a79be79afc1f1f7789cb701f8f0c738989447a"
 local GUI_REV="663d8a59cbf8d87023685cf8f3a77d8a0f66bcf4"
 local SPREAD_REV="8bfaaaa7fac652ecc486baf20b983f22cd7b98d3"
 local BASE="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/novax/v1/"
@@ -453,6 +453,7 @@ end
 -- modules then synchronize their runtime and visible controls from NX_STATE.
 env.NX_CONFIG_APPLY=function()
   if controlsModule and controlsModule.ApplyState then pcall(controlsModule.ApplyState) end
+  if equipmentModule and equipmentModule.ApplyState then pcall(equipmentModule.ApplyState) end
   if dropsModule and dropsModule.ApplyState then pcall(dropsModule.ApplyState) end
   if type(visualModule)=="table" and visualModule.ApplyState then pcall(visualModule.ApplyState) end
   if type(env.NovaXWeatherControls)=="table" and env.NovaXWeatherControls.ApplyState then

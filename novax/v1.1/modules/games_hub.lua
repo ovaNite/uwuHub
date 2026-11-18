@@ -247,7 +247,7 @@ return function(env)
     print("[NovaX Games] "..line)
   end
   local function httpGet(url,maxSize)
-    local ok,response=pcall(function() return game:HttpGet(url,true) end)
+    local ok,response=pcall(function() return game:HttpGet(url,false) end)
     if not ok or type(response)~="string" or #response==0 then
       return nil,"HTTP unavailable: "..string.sub(tostring(response),1,100)
     end

@@ -4,7 +4,7 @@
 -- 90Hz weather, compatibility checker and integrated Weather/Diagnostics tabs.
 local REV="2df577a270a78151c9afa2f7b7b9340e45a38f4d"
 local UI_REV="55e2d649d20373ec445ac66fc49bddd494cadab2"
-local GAMES_REV="2b79835bac83bb58a99a20a414d8111b64219057"
+local GAMES_REV="2c397d327803d70a7df17b359ace24d806bbdf9d"
 local VISUAL_REV="c290c9998ce798a2720f111b19f7885e10b0d695"
 local DIAG_REV="403437264c2067d8f1fbd4c64fb53fadb1b78d65"
 local FIRE_REV="30b4f0d542cc71fafeb34910751f3c81a9828553"

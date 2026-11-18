@@ -4,7 +4,8 @@
 -- 90Hz weather, compatibility checker and integrated Weather/Diagnostics tabs.
 local REV="2df577a270a78151c9afa2f7b7b9340e45a38f4d"
 local VISUAL_REV="b93030ffa9dd71735c208293ff59d15cb63c4c59"
-local DIAG_REV="650f186a50d8b44420c946ca9d8ff39e008bd6f3"
+local DIAG_REV="403437264c2067d8f1fbd4c64fb53fadb1b78d65"
+local FIRE_REV="863f28781089235a47e0df54cf28c52ba0b7ab4f"
 local CORE_REV="7d1f117e9d25d7cbb47f17ebdd59f007ecc34605"
 local BASE="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/novax/v1/"
 local env=(getgenv and getgenv()) or _G
@@ -15,6 +16,8 @@ local function load(relative)
   local url = relative=="core/legacy.lua" and ("https://raw.githubusercontent.com/ovaNite/uwuHub/"..CORE_REV.."/novax/v1.1/core/legacy.lua") or relative=="modules/visual_studio.lua" and ("https://raw.githubusercontent.com/ovaNite/uwuHub/"..VISUAL_REV.."/novax/v1.1/modules/visual_studio.lua") or (BASE..relative)
   if relative=="modules/weapon_diagnostics.lua" then
     url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..DIAG_REV.."/novax/v1.1/modules/weapon_diagnostics.lua"
+  elseif relative=="modules/rapid_fire.lua" then
+    url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..FIRE_REV.."/novax/v1.1/modules/rapid_fire.lua"
   end
   local ok,result=pcall(function()return game:HttpGet(url,true)end)
   if not ok or type(result)~="string" or #result<100 then
@@ -123,7 +126,20 @@ if type(diagnosticsFactory)=="function" then
     warn("[NovaX] Weapon Diagnostics: "..tostring(err))
   end
 end
--- Local weapon controls: regular Tool activation and local sound volume only.
+-- Use the real client Gun controller when present; never confuse viewmodels
+-- or activation spam with confirmed shots.
+local rapidFactory=execute("modules/rapid_fire.lua",false)
+local rapidModule=nil
+if type(rapidFactory)=="function" then
+  local ok,result=pcall(rapidFactory,env)
+  if ok and type(result)=="table" then rapidModule=result
+  else
+    local message="Fast Fire: "..tostring(result)
+    table.insert(env.NovaXRelease.Errors,message)
+    warn("[NovaX] "..message)
+  end
+end
+-- Weapon controls and local shot sounds. Tool mode is fallback only.
 local controlsModule
 local okControls,controlsError=pcall(function()
   local ui=assert(env.NX_UI_WINDOW,"NovaX GUI not available")
@@ -131,7 +147,7 @@ local okControls,controlsError=pcall(function()
   local input=game:GetService("UserInputService")
   local run=game:GetService("RunService")
   local workspace=game:GetService("Workspace")
-  local fast,muted,rate,volume=false,false,10,100
+  local fast,muted,rate,volume=false,false,4,100
   local includeShared=true
   local includeItemSounds=true
   local held,active,nextShot=false,true,0
@@ -294,19 +310,33 @@ local okControls,controlsError=pcall(function()
   connect(input.WindowFocusReleased,function() held=false end)
   connect(run.Heartbeat,function()
     if not active or not fast or not held or input:GetFocusedTextBox() then return end
+    -- When the RIVALS Gun hook is installed it handles the real client
+    -- cooldown. Do not simultaneously spam legacy Tool activations.
+    if rapidModule and rapidModule:Ready() then return end
     local now=os.clock()
     if now<nextShot then return end
-    nextShot=now+1/rate
+    nextShot=now+1/math.max(1,rate*4)
     local character=player.Character
     local tool=character and character:FindFirstChildOfClass("Tool")
     if tool and tool.Enabled then pcall(function() tool:Activate() end) end
   end)
   local tab=ui:CreateTab("Weapon Controls",4483345998)
   tab:CreateSection("Fast Fire")
-  tab:CreateLabel("Repeats Tool activation while holding left mouse; game cooldowns still apply.")
-  tab:CreateToggle({Name="Fast Fire",CurrentValue=false,Callback=function(v) fast=v;nextShot=0 end})
-  tab:CreateSlider({Name="Activations per second",Range={1,20},Increment=1,CurrentValue=10,
-    Callback=function(v) rate=math.clamp(tonumber(v) or 10,1,20) end})
+  tab:CreateLabel("Targets local Gun._shoot_cooldown (x1-x10). Server firing limits may still apply.")
+  tab:CreateToggle({Name="Fast Fire",CurrentValue=false,Callback=function(v)
+    fast=v;nextShot=0
+    if rapidModule then rapidModule:SetActive(v) end
+  end})
+  tab:CreateSlider({Name="Fire speed multiplier (x)",Range={1,10},Increment=1,CurrentValue=4,
+    Callback=function(v)
+      rate=math.clamp(tonumber(v) or 4,1,10)
+      if rapidModule then rapidModule:SetMultiplier(rate) end
+    end})
+  tab:CreateButton({Name="Check Fast Fire status",Callback=function()
+    local message=rapidModule and rapidModule:Status() or "Gun hook unavailable; Tool fallback only"
+    print("[NovaX Fast Fire] "..message)
+    if ui.Notify then ui:Notify({Title="Fast Fire",Content=message,Duration=7}) end
+  end})
   tab:CreateSection("Local shot sounds")
   tab:CreateLabel("Uses shooting sound IDs when available and common local sound names.")
   tab:CreateToggle({Name="No Shoot Sound",CurrentValue=false,Callback=function(v) muted=v;applySounds() end})
@@ -749,6 +779,7 @@ end
 env.NX_CLEANUP=function()
   if modelControls then pcall(modelControls.Stop) end
   if controlsModule then pcall(controlsModule.Stop) end
+  if rapidModule and type(rapidModule.Stop)=="function" then pcall(rapidModule.Stop,rapidModule) end
   if type(visualModule)=="table" and type(visualModule.Stop)=="function" then
     pcall(visualModule.Stop)
   end

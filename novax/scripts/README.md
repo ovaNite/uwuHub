@@ -9,6 +9,7 @@ novax/scripts/
     game.json                # title, place IDs, universe ID, script filename
     loader.lua               # per-experience entry point
     combos.lua               # optional editable combo definitions
+    m1_engine.lua            # continuous M1 input + Info.BaseM1 monitor
   your-next-game/
     game.json
     loader.lua
@@ -22,4 +23,4 @@ novax/scripts/
 
 **Important:** Upload scripts only from sources you trust. Code executed by `loadstring` gets the executor's privileges. Stop works fully only when the loader implements the `Stop()` contract and cooperatively ends its asynchronous tasks. Do not store secrets, passwords, GitHub tokens or private user data in publicly readable scripts.
 
-**TSB:** The included loader is a manual Combo Studio/recorder starter. Character-specific auto combo timelines need actual tested move data; this repo intentionally does not claim unverified character timings.
+**TSB:** The loader offers a manual Combo Studio, saved per-character recordings and a continuous M1 input controller (start/stop and rate controls). It scans `ReplicatedStorage.Info.BaseM1` to recognize the M1 animation group and step currently playing. These IDs specify animations, **not** hit distance, server damage, or combo limits. Repeated clicks do **not** remove the game's server-side 4-hit reset and do **not** grant unlimited attack range. Character-specific auto-combo timelines still require actual tested move data.

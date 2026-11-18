@@ -2971,6 +2971,66 @@ function setupTrigger()
   end)
 end
 
+-- Fail-closed combat teleport gate. RIVALS DuelLibrary and ClientDueler
+-- are class definitions, not reliable live team assignments by themselves.
+-- Never infer an enemy from a missing TeamID, neutral lobby state or cursor lock.
+local LOBBY_SPAWN_DESCRIPTORS={
+  {{"WaitingRoom","Important","Spawn"},Vector3.new(120,-635.75,1964.75),Vector3.new(25,1,25)},
+  {{"ShootingRange","Important","Spawn"},Vector3.new(1406.67,-713.675,1044.35),Vector3.new(13.25,5.25,39.5)},
+  {{"Hub","Important","Center","Spawn"},Vector3.new(109,-680,1183.95),Vector3.new(20,2,20)},
+  {{"Hub","Important","Duels","Spawn"},Vector3.new(186,-677.5,1183.95),Vector3.new(2,2,2)},
+}
+local function combatTeamToken(p)
+  if not p then return nil end
+  local value
+  -- TeamID from Player/Character is only used when BOTH sides have it.
+  local character=p.Character
+  for _,key in ipairs({"TeamID","TeamId"}) do
+    local ok,v=pcall(function()return p:GetAttribute(key)end)
+    if ok then value=normalizeTeamToken(v) end
+    if not value and character then
+      ok,v=pcall(function()return character:GetAttribute(key)end)
+      if ok then value=normalizeTeamToken(v) end
+    end
+    if value then return "duel:"..value end
+  end
+  if p.Team and not p.Neutral then return "roblox:"..tostring(p.Team) end
+  return nil
+end
+local function inLobbySpawnZone(position)
+  if typeof(position)~="Vector3" then return true end
+  local lobby=workspace:FindFirstChild("Lobby")
+  for _,descriptor in ipairs(LOBBY_SPAWN_DESCRIPTORS) do
+    local path,fallbackCenter,fallbackSize=descriptor[1],descriptor[2],descriptor[3]
+    local node=lobby
+    for _,segment in ipairs(path) do
+      node=node and node:FindFirstChild(segment) or nil
+    end
+    local part=node and node:IsA("BasePart") and node or nil
+    local relative=part and part.CFrame:PointToObjectSpace(position) or (position-fallbackCenter)
+    local size=part and part.Size or fallbackSize
+    if math.abs(relative.X)<=size.X/2+13 and
+       math.abs(relative.Z)<=size.Z/2+13 and
+       math.abs(relative.Y)<=size.Y/2+24 then
+      return true
+    end
+  end
+  return false
+end
+local function safeCombatTeleportTarget(player)
+  if not RUNNING or not player or player==LocalPlayer or not isAlive(player) then return false,"invalid target" end
+  if not isRoundStarted() then return false,"round not active" end
+  local myRoot,targetRoot=getRoot(),getPlayerRoot(player)
+  if not myRoot or not targetRoot then return false,"missing root" end
+  if inLobbySpawnZone(myRoot.Position) or inLobbySpawnZone(targetRoot.Position) then
+    return false,"lobby/spawn zone"
+  end
+  local mine,theirs=combatTeamToken(LocalPlayer),combatTeamToken(player)
+  if not mine or not theirs then return false,"unconfirmed duel TeamID" end
+  if mine==theirs then return false,"teammate" end
+  if hasSpawnProtection and hasSpawnProtection(player) then return false,"spawn protection" end
+  return true,"confirmed combat"
+end
 --  TELEPORT + AUTO BACKSTAB
 local tpDropdownRef = nil
 local backstabBusy = false
@@ -2993,11 +3053,19 @@ function setTPPlayer(value)
 end
 
 function getBackstabTargetPlayer()
-  local selected = findPlayerByName(STATE.TPPlayer)
-  if selected and selected ~= LocalPlayer and isAlive(selected) and isEnemy(selected, STATE.AimTeamCheck) then
-    return selected
+  local selected=findPlayerByName(STATE.TPPlayer)
+  if selected and safeCombatTeleportTarget(selected) then return selected end
+  local best,bestDistance=nil,math.huge
+  local root=getRoot()
+  if not root then return nil end
+  for _,candidate in ipairs(Players:GetPlayers()) do
+    if candidate~=LocalPlayer and safeCombatTeleportTarget(candidate) then
+      local part=getPlayerRoot(candidate)
+      local d=part and (part.Position-root.Position).Magnitude or math.huge
+      if d<bestDistance then best,bestDistance=candidate,d end
+    end
   end
-  return getNearestEnemyPlayer()
+  return best
 end
 
 function refreshTPDropdown()
@@ -3034,15 +3102,21 @@ function teleportNearSelected(behind)
     return false
   end
   
-  local targetRoot = getPlayerRoot(targetPlayer)
+  local targetRoot=getPlayerRoot(targetPlayer)
   if not targetRoot then
-    notify("TP", "Target hat keinen Root", 2)
+    notify("TP","Target hat keinen Root",2)
     return false
   end
-  
+  local eligible,reason=safeCombatTeleportTarget(targetPlayer)
+  if not eligible then
+    notify("TP blocked","Spawn/Team check: "..tostring(reason),3)
+    return false
+  end
+
   rightClick()
   task.wait(0.02)
-  local ok = teleportToTargetRoot(targetRoot, behind == true)
+  local allowed=safeCombatTeleportTarget(targetPlayer)
+  local ok=allowed and teleportToTargetRoot(targetRoot,behind==true) or false
   if ok then
     notify("TP", string.format("Zu %s (@%s) teleportiert", tostring(targetPlayer.DisplayName or targetPlayer.Name), tostring(targetPlayer.Name)), 1.5)
   end
@@ -4563,10 +4637,12 @@ function restoreBackstabOrigin(originCF, originCameraCF)
   end
 end
 function doBackstab(targetPlayer)
-  local targetRoot = getPlayerRoot(targetPlayer)
-  local myRoot = getRoot()
-  if not targetRoot or not myRoot then return false, 0 end
-  if hasSpawnProtection(targetPlayer) then return false, 0, "protected" end
+  local eligible,reason=safeCombatTeleportTarget(targetPlayer)
+  if not eligible then return false,0,reason end
+  local targetRoot=getPlayerRoot(targetPlayer)
+  local myRoot=getRoot()
+  if not targetRoot or not myRoot then return false,0,"missing root" end
+  if hasSpawnProtection(targetPlayer) then return false,0,"protected" end
   local originCF = myRoot.CFrame
   local originCameraCF = Camera and Camera.CFrame or nil
   local hum = getPlayerHumanoid(targetPlayer)
@@ -4574,13 +4650,16 @@ function doBackstab(targetPlayer)
   local hit, damage = false, 0
   local ok = false
   pcall(function()
-    ok = aimAtTargetBack(targetRoot)
+    if safeCombatTeleportTarget(targetPlayer) then
+      ok=aimAtTargetBack(targetRoot)
+    end
   end)
   if ok then
     task.wait(0.025)
     rightClick()
     local deadline = tick() + 1.15
     while RUNNING and targetRoot.Parent and tick() < deadline do
+      if not safeCombatTeleportTarget(targetPlayer) then break end
       aimAtTargetBack(targetRoot)
       hum = getPlayerHumanoid(targetPlayer)
       if not hum or hum.Health <= 0 then
@@ -4602,7 +4681,8 @@ end
 function setupAutoBackstab()
   task.spawn(function()
     while RUNNING do
-      if STATE.AutoBackstab and isRoundStarted() and not backstabBusy and tick() >= nextBackstabAt then
+      if STATE.AutoBackstab and isRoundStarted() and not inLobbySpawnZone((getRoot() and getRoot().Position) or Vector3.zero)
+        and not backstabBusy and tick() >= nextBackstabAt then
         local target = getBackstabTargetPlayer()
         if target then
           if hasSpawnProtection(target) then
@@ -4619,7 +4699,14 @@ function setupAutoBackstab()
     end
   end)
 end
-function backstabOnce() if not isRoundStarted() then notify("Backstab","Warte bis die Runde gestartet ist",2) return end; local target=getBackstabTargetPlayer(); if not target then notify("Backstab","Kein gueltiges Ziel",2) return end; task.spawn(function() if waitForSpawnProtectionGone(target,6,false) then doBackstab(target) end end) end
+function backstabOnce()
+  if not isRoundStarted() then notify("Backstab","Warte bis die Runde gestartet ist",2);return end
+  local target=getBackstabTargetPlayer()
+  if not target then notify("Backstab","Kein bestaetigtes Duellziel ausserhalb des Spawns",3);return end
+  task.spawn(function()
+    if safeCombatTeleportTarget(target) then doBackstab(target) end
+  end)
+end
 GUI_READY=false
 stateControlRefs={}
 aimLockToggleRef,autoAimToggleRef,rageToggleRef,silentToggleRef=nil,nil,nil,nil

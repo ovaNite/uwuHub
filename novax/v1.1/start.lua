@@ -4,7 +4,7 @@
 -- 90Hz weather, compatibility checker and integrated Weather/Diagnostics tabs.
 local REV="2df577a270a78151c9afa2f7b7b9340e45a38f4d"
 local UI_REV="55e2d649d20373ec445ac66fc49bddd494cadab2"
-local GAMES_REV="c242442b8977b7dd6f156678cf04a12a0946a9c3"
+local GAMES_REV="2b79835bac83bb58a99a20a414d8111b64219057"
 local VISUAL_REV="c290c9998ce798a2720f111b19f7885e10b0d695"
 local DIAG_REV="403437264c2067d8f1fbd4c64fb53fadb1b78d65"
 local FIRE_REV="30b4f0d542cc71fafeb34910751f3c81a9828553"
@@ -470,6 +470,7 @@ end
 -- Called after the original Config Manager loads a profile. All extension
 -- modules then synchronize their runtime and visible controls from NX_STATE.
 env.NX_CONFIG_APPLY=function()
+  if gamesHubModule and gamesHubModule.ApplyState then pcall(gamesHubModule.ApplyState) end
   if controlsModule and controlsModule.ApplyState then pcall(controlsModule.ApplyState) end
   if equipmentModule and equipmentModule.ApplyState then pcall(equipmentModule.ApplyState) end
   if dropsModule and dropsModule.ApplyState then pcall(dropsModule.ApplyState) end

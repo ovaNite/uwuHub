@@ -48,7 +48,7 @@ return function(env)
     local ok,library=pcall(require,source)
     local all=ok and type(library)=="table" and library.Cosmetics or nil
     if type(all)~="table" then status="CosmeticLibrary.Cosmetics unavailable";return false end
-    local lists={},{}
+    local lists={}
     for _,category in ipairs(categories) do lists[category]={} end
     local lookup={}
     for name,entry in pairs(all) do
@@ -212,9 +212,6 @@ return function(env)
     if #options==0 then options={"No matching cosmetics"} end
     if ref.selector and ref.selector.Refresh then
       ref.selector:Refresh(options)
-    end
-    if ref.page and ref.page.Set then
-      pcall(function()ref.page:Set(page)end)
     end
     status=string.format("%s: %d entries, page %d/%d (local preview)",
       category,#list,page,pages)

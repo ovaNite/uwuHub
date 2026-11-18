@@ -177,9 +177,13 @@ local okControls,controlsError=pcall(function()
   local input=game:GetService("UserInputService")
   local run=game:GetService("RunService")
   local workspace=game:GetService("Workspace")
-  local fast,muted,rate,volume=false,false,4,100
-  local includeShared=true
-  local includeItemSounds=true
+  local settings=assert(env.NX_STATE,"NovaX state unavailable")
+  local fast=settings.NovaXFastFire==true
+  local muted=settings.NovaXNoShootSound==true
+  local rate=math.floor(math.clamp(tonumber(settings.NovaXFastFireMultiplier) or 4,1,20))
+  local volume=math.clamp(tonumber(settings.NovaXShotVolume) or 100,0,100)
+  local includeShared=settings.NovaXSharedShotSounds~=false
+  local includeItemSounds=settings.NovaXWeaponEffectSounds~=false
   local held,active,nextShot=false,true,0
   local saved=setmetatable({}, {__mode="k"})
   local watched=setmetatable({}, {__mode="k"})
@@ -353,15 +357,18 @@ local okControls,controlsError=pcall(function()
   local tab=ui:CreateTab("Weapon Controls",4483345998)
   tab:CreateSection("Fast Fire")
   tab:CreateLabel("Targets local Gun._shoot_cooldown (x1-x20). Server firing limits may still apply.")
-  tab:CreateToggle({Name="Fast Fire",CurrentValue=false,Callback=function(v)
-    fast=v;nextShot=0
-    if rapidModule then rapidModule:SetActive(v) end
-  end})
-  tab:CreateSlider({Name="Fire speed multiplier (x)",Range={1,20},Increment=1,CurrentValue=4,
+  local controlRefs={}
+  local function record(key,control) controlRefs[key]=control;return control end
+  record("NovaXFastFire",tab:CreateToggle({Name="Fast Fire",CurrentValue=fast,Callback=function(v)
+    fast=v==true;settings.NovaXFastFire=fast;nextShot=0
+    if rapidModule then rapidModule:SetActive(fast) end
+  end}))
+  record("NovaXFastFireMultiplier",tab:CreateSlider({Name="Fire speed multiplier (x)",Range={1,20},Increment=1,CurrentValue=rate,
     Callback=function(v)
-      rate=math.clamp(tonumber(v) or 4,1,20)
+      rate=math.floor(math.clamp(tonumber(v) or 4,1,20))
+      settings.NovaXFastFireMultiplier=rate
       if rapidModule then rapidModule:SetMultiplier(rate) end
-    end})
+    end}))
   tab:CreateButton({Name="Check Fast Fire status",Callback=function()
     local message=rapidModule and rapidModule:Status() or "Gun hook unavailable; Tool fallback only"
     print("[NovaX Fast Fire] "..message)
@@ -369,11 +376,11 @@ local okControls,controlsError=pcall(function()
   end})
   tab:CreateSection("Spread")
   tab:CreateLabel("Uses 6 ItemLibrary spread fields for all weapons; local changes only.")
-  tab:CreateToggle({Name="No Spread",CurrentValue=type(env.NX_STATE)=="table" and env.NX_STATE.NoSpread==true,
+  record("NoSpread",tab:CreateToggle({Name="No Spread",CurrentValue=settings.NoSpread==true,
     Callback=function(v)
-      if noSpreadModule then noSpreadModule:SetActive(v)
-      elseif type(env.NX_STATE)=="table" then env.NX_STATE.NoSpread=v end
-    end})
+      settings.NoSpread=v==true
+      if noSpreadModule then noSpreadModule:SetActive(v) end
+    end}))
   tab:CreateButton({Name="Check No Spread status",Callback=function()
     local message=noSpreadModule and noSpreadModule:Status() or "ItemLibrary module unavailable"
     print("[NovaX No Spread] "..message)
@@ -381,13 +388,40 @@ local okControls,controlsError=pcall(function()
   end})
   tab:CreateSection("Local shot sounds")
   tab:CreateLabel("Uses shooting sound IDs when available and common local sound names.")
-  tab:CreateToggle({Name="No Shoot Sound",CurrentValue=false,Callback=function(v) muted=v;applySounds() end})
-  tab:CreateToggle({Name="Include shared shot sounds (may mute other effects)",CurrentValue=true,
-    Callback=function(v) includeShared=v;applySounds() end})
-  tab:CreateToggle({Name="Include weapon effect sounds (may mute extra effects)",CurrentValue=true,
-    Callback=function(v) includeItemSounds=v;applySounds() end})
-  tab:CreateSlider({Name="Shot volume (%)",Range={0,100},Increment=5,CurrentValue=100,
-    Callback=function(v) volume=math.clamp(tonumber(v) or 100,0,100);applySounds() end})
+  record("NovaXNoShootSound",tab:CreateToggle({Name="No Shoot Sound",CurrentValue=muted,
+    Callback=function(v) muted=v==true;settings.NovaXNoShootSound=muted;applySounds() end}))
+  record("NovaXSharedShotSounds",tab:CreateToggle({Name="Include shared shot sounds (may mute other effects)",CurrentValue=includeShared,
+    Callback=function(v) includeShared=v==true;settings.NovaXSharedShotSounds=includeShared;applySounds() end}))
+  record("NovaXWeaponEffectSounds",tab:CreateToggle({Name="Include weapon effect sounds (may mute extra effects)",CurrentValue=includeItemSounds,
+    Callback=function(v) includeItemSounds=v==true;settings.NovaXWeaponEffectSounds=includeItemSounds;applySounds() end}))
+  record("NovaXShotVolume",tab:CreateSlider({Name="Shot volume (%)",Range={0,100},Increment=5,CurrentValue=volume,
+    Callback=function(v) volume=math.clamp(tonumber(v) or 100,0,100);settings.NovaXShotVolume=volume;applySounds() end}))
+  controlsModule.ApplyState=function()
+    if not active then return end
+    fast=settings.NovaXFastFire==true
+    muted=settings.NovaXNoShootSound==true
+    rate=math.floor(math.clamp(tonumber(settings.NovaXFastFireMultiplier) or 4,1,20))
+    volume=math.clamp(tonumber(settings.NovaXShotVolume) or 100,0,100)
+    includeShared=settings.NovaXSharedShotSounds~=false
+    includeItemSounds=settings.NovaXWeaponEffectSounds~=false
+    nextShot=0
+    if rapidModule then
+      rapidModule:SetMultiplier(rate)
+      rapidModule:SetActive(fast)
+    end
+    if noSpreadModule then noSpreadModule:SetActive(settings.NoSpread==true) end
+    local updates={
+      NovaXFastFire=fast,NovaXFastFireMultiplier=rate,NoSpread=settings.NoSpread==true,
+      NovaXNoShootSound=muted,NovaXSharedShotSounds=includeShared,
+      NovaXWeaponEffectSounds=includeItemSounds,NovaXShotVolume=volume
+    }
+    for key,value in pairs(updates) do
+      local control=controlRefs[key]
+      if control and control.Set then pcall(function()control:Set(value)end) end
+    end
+    applySounds()
+  end
+  controlsModule.ApplyState()
   roots()
 end)
 if not okControls then
@@ -409,6 +443,16 @@ local okModels,modelError=pcall(function()
   local retryAt=0
   local chosen,adjustments={}, {x=0,y=0,z=0,rx=0,ry=0,rz=0}
   local configState=type(env.NX_STATE)=="table" and env.NX_STATE or nil
+  local adjustmentKeys={
+    x="NovaXSkinOffsetX",y="NovaXSkinOffsetY",z="NovaXSkinOffsetZ",
+    rx="NovaXSkinRotationX",ry="NovaXSkinRotationY",rz="NovaXSkinRotationZ"
+  }
+  local adjustmentControls={}
+  if configState then
+    for key,setting in pairs(adjustmentKeys) do
+      adjustments[key]=tonumber(configState[setting]) or 0
+    end
+  end
   local http=game:GetService("HttpService")
   local encoded,filterEncoded="{}","{}"
   local excluded={}
@@ -753,10 +797,20 @@ local okModels,modelError=pcall(function()
     {"Offset Z","z",-2,2,0.05},{"Rotation X","rx",-180,180,5},
     {"Rotation Y","ry",-180,180,5},{"Rotation Z","rz",-180,180,5}}) do
     local key=item[2]
-    tab:CreateSlider({Name=item[1],Range={item[3],item[4]},Increment=item[5],CurrentValue=0,
-      Callback=function(value) adjustments[key]=tonumber(value) or 0 end})
+    adjustmentControls[key]=tab:CreateSlider({Name=item[1],Range={item[3],item[4]},Increment=item[5],CurrentValue=adjustments[key],
+      Callback=function(value)
+        adjustments[key]=tonumber(value) or 0
+        if configState then configState[adjustmentKeys[key]]=adjustments[key] end
+      end})
   end
-  modelControls={Stop=function()
+  modelControls={ApplyState=function()
+    if not configState then return end
+    for key,setting in pairs(adjustmentKeys) do
+      adjustments[key]=tonumber(configState[setting]) or 0
+      local control=adjustmentControls[key]
+      if control and control.Set then pcall(function()control:Set(adjustments[key])end) end
+    end
+  end,Stop=function()
     active=false;for _,c in ipairs(links) do c:Disconnect() end;clearShop();restoreIcons();clear()
   end}
   local configCheckAt,shopCheckAt,iconCheckAt=0,0,0
@@ -817,6 +871,17 @@ if not okModels then
   if modelControls then pcall(modelControls.Stop);modelControls=nil end
   table.insert(env.NovaXRelease.Errors,"Skin Changer: "..tostring(modelError))
   warn("[NovaX] Skin Changer: "..tostring(modelError))
+end
+-- Called after the original Config Manager loads a profile. All extension
+-- modules then synchronize their runtime and visible controls from NX_STATE.
+env.NX_CONFIG_APPLY=function()
+  if controlsModule and controlsModule.ApplyState then pcall(controlsModule.ApplyState) end
+  if dropsModule and dropsModule.ApplyState then pcall(dropsModule.ApplyState) end
+  if modelControls and modelControls.ApplyState then pcall(modelControls.ApplyState) end
+  if type(visualModule)=="table" and visualModule.ApplyState then pcall(visualModule.ApplyState) end
+  if type(env.NovaXWeatherControls)=="table" and env.NovaXWeatherControls.ApplyState then
+    pcall(env.NovaXWeatherControls.ApplyState)
+  end
 end
 env.NX_CLEANUP=function()
   if modelControls then pcall(modelControls.Stop) end

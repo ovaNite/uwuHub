@@ -7,7 +7,8 @@ local VISUAL_REV="b93030ffa9dd71735c208293ff59d15cb63c4c59"
 local DIAG_REV="403437264c2067d8f1fbd4c64fb53fadb1b78d65"
 local FIRE_REV="30b4f0d542cc71fafeb34910751f3c81a9828553"
 local DROPS_REV="b129b8d81f406cf491b474eab9930364accfa466"
-local CORE_REV="79bbda7d58600b799b5fa22f9b8551be1901d540"
+local CORE_REV="7c9ef394030924c82ae190a4900a367186bc1659"
+local SPREAD_REV="8bfaaaa7fac652ecc486baf20b983f22cd7b98d3"
 local BASE="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/novax/v1/"
 local env=(getgenv and getgenv()) or _G
 if type(loadstring)~="function" then
@@ -21,6 +22,8 @@ local function load(relative)
     url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..FIRE_REV.."/novax/v1.1/modules/rapid_fire.lua"
   elseif relative=="modules/auto_drops.lua" then
     url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..DROPS_REV.."/novax/v1.1/modules/auto_drops.lua"
+  elseif relative=="modules/no_spread.lua" then
+    url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..SPREAD_REV.."/novax/v1.1/modules/no_spread.lua"
   end
   local ok,result=pcall(function()return game:HttpGet(url,true)end)
   if not ok or type(result)~="string" or #result<100 then
@@ -137,6 +140,18 @@ if type(dropsFactory)=="function" then
   if ok and type(result)=="table" then dropsModule=result
   else
     local message="Auto Drops: "..tostring(result)
+    table.insert(env.NovaXRelease.Errors,message)
+    warn("[NovaX] "..message)
+  end
+end
+-- Reversible No Spread via the six numeric/boolean ItemLibrary spread fields.
+local noSpreadFactory=execute("modules/no_spread.lua",false)
+local noSpreadModule=nil
+if type(noSpreadFactory)=="function" then
+  local ok,result=pcall(noSpreadFactory,env)
+  if ok and type(result)=="table" then noSpreadModule=result
+  else
+    local message="No Spread: "..tostring(result)
     table.insert(env.NovaXRelease.Errors,message)
     warn("[NovaX] "..message)
   end
@@ -351,6 +366,18 @@ local okControls,controlsError=pcall(function()
     local message=rapidModule and rapidModule:Status() or "Gun hook unavailable; Tool fallback only"
     print("[NovaX Fast Fire] "..message)
     if ui.Notify then ui:Notify({Title="Fast Fire",Content=message,Duration=7}) end
+  end})
+  tab:CreateSection("Spread")
+  tab:CreateLabel("Uses 6 ItemLibrary spread fields for all weapons; local changes only.")
+  tab:CreateToggle({Name="No Spread",CurrentValue=type(env.NX_STATE)=="table" and env.NX_STATE.NoSpread==true,
+    Callback=function(v)
+      if noSpreadModule then noSpreadModule:SetActive(v)
+      elseif type(env.NX_STATE)=="table" then env.NX_STATE.NoSpread=v end
+    end})
+  tab:CreateButton({Name="Check No Spread status",Callback=function()
+    local message=noSpreadModule and noSpreadModule:Status() or "ItemLibrary module unavailable"
+    print("[NovaX No Spread] "..message)
+    if ui.Notify then ui:Notify({Title="No Spread",Content=message,Duration=7}) end
   end})
   tab:CreateSection("Local shot sounds")
   tab:CreateLabel("Uses shooting sound IDs when available and common local sound names.")
@@ -795,6 +822,7 @@ env.NX_CLEANUP=function()
   if modelControls then pcall(modelControls.Stop) end
   if controlsModule then pcall(controlsModule.Stop) end
   if dropsModule and type(dropsModule.Stop)=="function" then pcall(dropsModule.Stop,dropsModule) end
+  if noSpreadModule and type(noSpreadModule.Stop)=="function" then pcall(noSpreadModule.Stop,noSpreadModule) end
   if rapidModule and type(rapidModule.Stop)=="function" then pcall(rapidModule.Stop,rapidModule) end
   if type(visualModule)=="table" and type(visualModule.Stop)=="function" then
     pcall(visualModule.Stop)

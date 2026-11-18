@@ -202,22 +202,27 @@ return function(env)
       startNavigation(drop,root,hum)
     end
   end)
+  local controlRefs={}
+  local function rememberControl(key,control)
+    controlRefs[key]=control
+    return control
+  end
   local tab=ui:CreateTab("Auto Drops",4483345998)
   tab:CreateSection("Automatic pickups")
   tab:CreateLabel("Finds all _drop objects in Workspace; no scan-distance cap.")
-  tab:CreateToggle({Name="Auto Heal (whenever health is missing)",
-    CurrentValue=settings.NovaXAutoHeal,Callback=function(v)settings.NovaXAutoHeal=v end})
-  tab:CreateToggle({Name="Auto Ammo (Ammo + AmmoBalanced)",
-    CurrentValue=settings.NovaXAutoAmmo,Callback=function(v)settings.NovaXAutoAmmo=v end})
+  rememberControl("NovaXAutoHeal",tab:CreateToggle({Name="Auto Heal (whenever health is missing)",
+    CurrentValue=settings.NovaXAutoHeal,Callback=function(v)settings.NovaXAutoHeal=v end}))
+  rememberControl("NovaXAutoAmmo",tab:CreateToggle({Name="Auto Ammo (Ammo + AmmoBalanced)",
+    CurrentValue=settings.NovaXAutoAmmo,Callback=function(v)settings.NovaXAutoAmmo=v end}))
   tab:CreateSection("Pickup methods")
-  tab:CreateToggle({Name="Remote Touch (experimental)",
+  rememberControl("NovaXAutoDropRemote",tab:CreateToggle({Name="Remote Touch (experimental)",
     CurrentValue=settings.NovaXAutoDropRemote,
-    Callback=function(v)settings.NovaXAutoDropRemote=v end})
-  tab:CreateToggle({Name="Navigate to drop if needed (moves character)",
+    Callback=function(v)settings.NovaXAutoDropRemote=v end}))
+  rememberControl("NovaXAutoDropNavigate",tab:CreateToggle({Name="Navigate to drop if needed (moves character)",
     CurrentValue=settings.NovaXAutoDropNavigate,Callback=function(v)
       settings.NovaXAutoDropNavigate=v
       if not v then navigationToken+=1;navigationTarget=nil end
-    end})
+    end}))
   tab:CreateLabel("Remote collection can fail if the server checks distance.")
   tab:CreateButton({Name="Check Auto Drops status",Callback=function()
     local count=0
@@ -233,7 +238,19 @@ return function(env)
     print("[NovaX Auto Drops] "..message)
     if ui.Notify then ui:Notify({Title="Auto Drops",Content=message,Duration=8}) end
   end})
-  return {Stop=function()
+  return {
+    ApplyState=function()
+      for key,control in pairs(controlRefs) do
+        if control and control.Set then
+          local value=settings[key]
+          pcall(function()control:Set(value)end)
+        end
+      end
+      if not settings.NovaXAutoDropNavigate then
+        navigationToken+=1;navigationTarget=nil
+      end
+    end,
+    Stop=function()
     enabled=false
     navigationToken+=1
     navigationTarget=nil

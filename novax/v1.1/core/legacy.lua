@@ -5754,6 +5754,15 @@ end
       end
     end
   end
+  MST:CreateButton({
+    Name="Auto Config Status",
+    Callback=function()
+      local selected=autoConfigName or "(none)"
+      local message=autoConfigStatus.." | selected: "..selected
+      print("[NovaX Config] "..message)
+      notify("Auto Config",message,6)
+    end,
+  })
   
   addConnection("input", UserInputService.InputBegan:Connect(function(i, gp)
     if gp then

@@ -4205,13 +4205,35 @@ local function applyHeadGuard(t,root,hum)
     if proposed.Magnitude>0.01 then hum:Move(proposed.Unit,false) end
   end
 end
+-- Rotate the R15 body clockwise around the HEAD's current world position.
+-- The camera/visual head is the pivot, not HumanoidRootPart. This affects only
+-- local character movement and does not make head hitboxes invulnerable.
+local function applyRightHeadPivot(root,hum,dt)
+  local char=getChar()
+  local head=char and char:FindFirstChild("Head")
+  if not head or not head:IsA("BasePart") then return false end
+  if not root or not root:IsA("BasePart") or not hum or hum.Health<=0 then return false end
+  setAntiHitAutoRotate(hum,false)
+  local elapsed=math.clamp(tonumber(dt) or 1/60,0,1/30)
+  local speed=math.clamp(safeNum(STATE.AntiHitSpeed),0.4,12)
+  -- Negative yaw turns right. Delta rotation avoids runaway tick() angles.
+  local radians=-speed*2.8*elapsed
+  local pivot=head.Position
+  local forward=Vector3.new(root.CFrame.LookVector.X,0,root.CFrame.LookVector.Z)
+  if forward.Magnitude<0.05 then forward=Vector3.new(0,0,-1) end
+  local upright=CFrame.lookAt(root.Position,root.Position+forward.Unit,Vector3.yAxis)
+  root.CFrame=CFrame.new(pivot)*CFrame.Angles(0,radians,0)
+    *CFrame.new(-pivot)*upright
+  return true
+end
+
 function applyLobbyAntiHit(t,mode)
   local j=getAntiHitJoints(); if not j then return end; local yaw=math.sin(t*3.1)*1.4; local pitch=math.cos(t*2.7)*0.8; local roll=math.sin(t*3.5)*0.9
   if mode=="Head Orbit" or STATE.AntiHitExperimental then yaw=yaw+t*1.6; roll=roll+math.cos(t*5)*0.55 elseif mode=="Vector Chaos" then yaw=yaw+math.sin(t*6.2)*1.2; pitch=pitch+math.cos(t*4.9)*0.8 end
   if j.neck and j.neck:IsA("Motor6D") then j.neck.Transform=CFrame.Angles(pitch,yaw,roll) end; if j.waist and j.waist:IsA("Motor6D") then j.waist.Transform=CFrame.Angles(pitch*0.2,-yaw*0.25,0) end
 end
 function setupMovement()
-  addConnection("move", RunService.Heartbeat:Connect(function()
+  addConnection("move", RunService.Heartbeat:Connect(function(dt)
     if not RUNNING then return end
     pcall(function()
       local root,hum=getRoot(),getHumanoid()
@@ -4227,15 +4249,18 @@ function setupMovement()
         local t=tick()*math.clamp(safeNum(STATE.AntiHitSpeed),0.4,12)
         local mode=tostring(STATE.AntiHitMode or "Adaptive Jitter")
         if mode=="Head Guard (R15)" then
-          restoreAntiHitMovement()
+          -- Preserve the extra R15 neck/waist guard and evasive footwork.
           applyHeadGuard(t,root,hum)
+          applyRightHeadPivot(root,hum,dt)
+        elseif mode=="Head Orbit" then
+          if antiHitPose.char then restoreAntiHitPose() end
+          applyRightHeadPivot(root,hum,dt)
         else
-          restoreAntiHitPose()
+          if antiHitPose.char then restoreAntiHitPose() end
           setAntiHitAutoRotate(hum,false)
           local yaw=t*(mode=="Orbital Drift" and 5.4 or 7.2)
           local pitch=math.sin(t*3.4)*(STATE.AntiHitExperimental and 1.4 or 0.85)
           local roll=math.cos(t*4.1)*(mode=="Vector Chaos" and 1.4 or 0.85)
-          if mode=="Head Orbit" then pitch=pitch+math.pi end
           root.CFrame=CFrame.new(root.Position)*CFrame.Angles(pitch,yaw,roll)
         end
       else

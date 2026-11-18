@@ -338,15 +338,29 @@ local okModels,modelError=pcall(function()
   local chosen,adjustments={}, {x=0,y=0,z=0,rx=0,ry=0,rz=0}
   local configState=type(env.NX_STATE)=="table" and env.NX_STATE or nil
   local http=game:GetService("HttpService")
-  local encoded="{}"
+  local encoded,filterEncoded="{}","{}"
+  local excluded={}
   if configState then
     if type(configState.NovaXSkinSelections)~="string" then configState.NovaXSkinSelections="{}" end
     encoded=configState.NovaXSkinSelections
     local ok,data=pcall(function() return http:JSONDecode(encoded) end)
     if ok and type(data)=="table" then chosen=data end
+    if type(configState.NovaXSkinConfigFilter)~="string" then configState.NovaXSkinConfigFilter="{}" end
+    filterEncoded=configState.NovaXSkinConfigFilter
+    local filterOk,filterData=pcall(function() return http:JSONDecode(filterEncoded) end)
+    if filterOk and type(filterData)=="table" then excluded=filterData end
   end
   local catalog,assetsByName,weapons={}, {}, {}
-  local selectedWeapon,skinDropdown,weaponDropdown="",nil,nil
+  local skinWeapons,skinIcons={},{}
+  local iconOriginals=setmetatable({}, {__mode="k"})
+  local selectedWeapon,skinDropdown,weaponDropdown,configToggle="",nil,nil,nil
+  local shopEnabled=false
+  local shopToggle=nil
+  if configState then
+    if type(configState.NovaXShopPreview)~="boolean" then configState.NovaXShopPreview=false end
+    shopEnabled=configState.NovaXShopPreview
+  end
+  local shopEntries={}
   local labels={}
   local function clear()
     if shown then shown:Destroy();shown=nil end
@@ -373,7 +387,7 @@ local okModels,modelError=pcall(function()
         if model:IsA("Model") and not indexed[model.Name] then indexed[model.Name]=model end
       end
     end
-    local nextCatalog,nextWeapons={},{}
+    local nextCatalog,nextWeapons,nextSkinWeapons,nextSkinIcons={},{},{},{}
     for name,entry in pairs(all) do
       if type(name)=="string" and type(entry)=="table" and rawget(entry,"Type")=="Skin" then
         local weapon=rawget(entry,"ItemName");local asset=indexed[name]
@@ -381,12 +395,15 @@ local okModels,modelError=pcall(function()
           if not nextCatalog[weapon] then nextCatalog[weapon]={};nextWeapons[#nextWeapons+1]=weapon end
           local rarity=tostring(rawget(entry,"Rarity") or "Unknown")
           nextCatalog[weapon][#nextCatalog[weapon]+1]={name=name,rarity=rarity,model=asset}
+          nextSkinWeapons[name]=weapon
+          local image=rawget(entry,"Image")
+          if type(image)=="string" and image~="" then nextSkinIcons[name]=image end
         end
       end
     end
     table.sort(nextWeapons)
     for _,entries in pairs(nextCatalog) do table.sort(entries,function(a,b) return a.name<b.name end) end
-    catalog,assetsByName,weapons=nextCatalog,indexed,nextWeapons
+    catalog,assetsByName,weapons,skinWeapons,skinIcons=nextCatalog,indexed,nextWeapons,nextSkinWeapons,nextSkinIcons
     return #weapons>0
   end
   local function activeRig()
@@ -445,7 +462,7 @@ local okModels,modelError=pcall(function()
     shown=clone;shownRig=rig;shownSkin=skin
   end
   local tab=ui:CreateTab("Skin Changer",4483345998)
-  tab:CreateSection("Local weapon skins")
+  tab:CreateSection("Weapon skins")
   tab:CreateLabel("Choose a weapon and a skin. Only your view changes; ownership is unchanged.")
   loadCatalog()
   local available={};for _,name in ipairs(weapons) do available[#available+1]=name end
@@ -461,18 +478,37 @@ local okModels,modelError=pcall(function()
   end
   weaponDropdown=tab:CreateDropdown({Name="Weapon",Options=available,CurrentOption={available[1]},Callback=function(v)
     selectedWeapon=type(v)=="table" and tostring(v[1]) or tostring(v);refreshSkins()
+    if configToggle and configToggle.Set then configToggle:Set(excluded[selectedWeapon]~=true) end
   end})
   selectedWeapon=available[1]
+  local function syncConfig()
+    if not configState then return end
+    local filtered={}
+    for weapon,skin in pairs(chosen) do
+      if excluded[weapon]~=true and type(weapon)=="string" and type(skin)=="string" then filtered[weapon]=skin end
+    end
+    local ok,data=pcall(function() return http:JSONEncode(filtered) end)
+    if ok then encoded=data;configState.NovaXSkinSelections=data end
+    local filterOk,filterData=pcall(function() return http:JSONEncode(excluded) end)
+    if filterOk then filterEncoded=filterData;configState.NovaXSkinConfigFilter=filterData end
+  end
+  local function chooseSkin(weapon,skin)
+    if not weapon or not catalog[weapon] then return end
+    if skin and skinWeapons[skin]~=weapon then return end
+    chosen[weapon]=skin;syncConfig()
+    clear();retryAt=0
+    if selectedWeapon==weapon then refreshSkins() end
+  end
   skinDropdown=tab:CreateDropdown({Name="Skin",Options={"Original"},CurrentOption={"Original"},Callback=function(v)
     local label=type(v)=="table" and tostring(v[1]) or tostring(v)
-    chosen[selectedWeapon]=labels[label]
-    if configState then
-      local ok,data=pcall(function() return http:JSONEncode(chosen) end)
-      if ok then encoded=data;configState.NovaXSkinSelections=data end
-    end
-    clear();retryAt=0
+    chooseSkin(selectedWeapon,labels[label])
   end})
   refreshSkins()
+  configToggle=tab:CreateToggle({Name="Save this weapon in configs",CurrentValue=excluded[selectedWeapon]~=true,Callback=function(value)
+    if not catalog[selectedWeapon] then return end
+    if value then excluded[selectedWeapon]=nil else excluded[selectedWeapon]=true end
+    syncConfig()
+  end})
   tab:CreateButton({Name="Refresh skin catalogue",Callback=function()
     if not loadCatalog() then
       if ui.Notify then ui:Notify({Title="Skin Changer",Content="Catalogue not ready yet.",Duration=4}) end
@@ -482,9 +518,161 @@ local okModels,modelError=pcall(function()
     if not exists then selectedWeapon=weapons[1] end
     if weaponDropdown and weaponDropdown.Refresh then weaponDropdown:Refresh(weapons);weaponDropdown:Set(selectedWeapon) end
     refreshSkins()
+    if configToggle and configToggle.Set then configToggle:Set(excluded[selectedWeapon]~=true) end
   end})
+  -- The LOCAL overlay is a separate sibling button. It only updates NovaX's
+  -- in-memory/config selection and never calls the game's equip button.
+  local function restoreIcons()
+    for icon,entry in pairs(iconOriginals) do
+      pcall(function() if icon.Parent and icon.Image==entry.assigned then icon.Image=entry.original end end)
+      iconOriginals[icon]=nil
+    end
+  end
+  local function updateIcons()
+    local pg=player:FindFirstChildOfClass("PlayerGui")
+    local main=pg and pg:FindFirstChild("MainGui")
+    local frame=main and main:FindFirstChild("MainFrame")
+    local equipment=frame and frame:FindFirstChild("Equipment")
+    if not equipment then restoreIcons();return end
+    local desired={}
+    local left=equipment:FindFirstChild("Left")
+    if left then
+      for _,slot in ipairs(left:GetDescendants()) do
+        if slot.Name=="EquipmentButtonSlot" then
+          local button=slot:FindFirstChild("Button")
+          local title=button and button:FindFirstChild("Title")
+          local icon=button and button:FindFirstChild("Icon")
+          local skin=title and chosen[title.Text]
+          if icon and icon:IsA("ImageLabel") and skin and skinIcons[skin] then desired[icon]=skinIcons[skin] end
+        end
+      end
+    end
+    local right=equipment:FindFirstChild("Right")
+    local details=right and right:FindFirstChild("Details",true)
+    local box=details and details:FindFirstChild("Container")
+    local title=box and box:FindFirstChild("Title")
+    local icon=box and box:FindFirstChild("Icon")
+    local skin=title and chosen[title.Text]
+    if icon and icon:IsA("ImageLabel") and skin and skinIcons[skin] then desired[icon]=skinIcons[skin] end
+    local fighterRoot=frame:FindFirstChild("FighterInterfaces")
+    local fighter=fighterRoot and fighterRoot:FindFirstChild(player.Name)
+    local bottom=fighter and fighter:FindFirstChild("BottomRight")
+    local fighterBox=bottom and bottom:FindFirstChild("Container")
+    local hotbar=fighterBox and fighterBox:FindFirstChild("Hotbar")
+    local slots=hotbar and hotbar:FindFirstChild("Container")
+    if slots then
+      for weapon,selected in pairs(chosen) do
+        local slot=slots:FindFirstChild(weapon)
+        local weaponIcon=slot and slot:FindFirstChild("Icon")
+        if weaponIcon and weaponIcon:IsA("ImageLabel") and skinIcons[selected] then desired[weaponIcon]=skinIcons[selected] end
+      end
+    end
+    local equipped=fighterBox and fighterBox:FindFirstChild("EquippedDisplay")
+    local equippedBox=equipped and equipped:FindFirstChild("Container")
+    local weaponBox=equippedBox and equippedBox:FindFirstChild("Weapon")
+    local equippedIcon=weaponBox and weaponBox:FindFirstChild("Icon")
+    local _,currentWeapon=activeRig()
+    local equippedSkin=currentWeapon and chosen[currentWeapon]
+    if equippedIcon and equippedIcon:IsA("ImageLabel") and equippedSkin and skinIcons[equippedSkin] then desired[equippedIcon]=skinIcons[equippedSkin] end
+    for old,entry in pairs(iconOriginals) do
+      if not desired[old] then
+        pcall(function() if old.Parent and old.Image==entry.assigned then old.Image=entry.original end end)
+        iconOriginals[old]=nil
+      end
+    end
+    for object,image in pairs(desired) do
+      pcall(function()
+        local entry=iconOriginals[object]
+        if not entry then entry={original=object.Image};iconOriginals[object]=entry
+        elseif object.Image~=entry.assigned then entry.original=object.Image end
+        object.Image=image;entry.assigned=image
+      end)
+    end
+  end
+  local function clearShop()
+    for slot,entry in pairs(shopEntries) do
+      if entry.overlay then entry.overlay:Destroy() end
+      pcall(function()
+        if entry.lock and entry.lock.Parent and entry.lock.Visible==false then entry.lock.Visible=entry.lockWas end
+        if entry.equipped and entry.equipped.Parent and entry.equipped.Visible==entry.assigned then
+          entry.equipped.Visible=entry.equippedWas
+        end
+      end)
+      shopEntries[slot]=nil
+    end
+  end
+  local function shopContainer()
+    local pg=player:FindFirstChildOfClass("PlayerGui")
+    local main=pg and pg:FindFirstChild("MainGui")
+    local frame=main and main:FindFirstChild("MainFrame")
+    local equipment=frame and frame:FindFirstChild("Equipment")
+    local customize=equipment and equipment:FindFirstChild("Customize")
+    local bottom=customize and customize:FindFirstChild("Bottom")
+    local box=bottom and bottom:FindFirstChild("Container")
+    local list=box and box:FindFirstChild("List")
+    return list and list:FindFirstChild("Container")
+  end
+  local function refreshShop()
+    if not shopEnabled then return end
+    local container=shopContainer()
+    if not container then return end
+    local slots=container:GetChildren()
+    local currentWeapon
+    for _,slot in ipairs(slots) do
+      local button=slot:FindFirstChild("Button")
+      local title=button and button:FindFirstChild("Title")
+      if title and title:IsA("TextLabel") and skinWeapons[title.Text] then currentWeapon=skinWeapons[title.Text];break end
+    end
+    for _,slot in ipairs(slots) do
+      if slot.Name=="CosmeticSlot" and slot:IsA("GuiObject") then
+        local button=slot:FindFirstChild("Button")
+        local title=button and button:FindFirstChild("Title")
+        local name=title and title:IsA("TextLabel") and title.Text or nil
+        local weapon=name and (skinWeapons[name] or (name=="None" and currentWeapon))
+        local entry=shopEntries[slot]
+        if entry and (entry.name~=name or entry.weapon~=weapon or not entry.overlay.Parent) then
+          entry.overlay:Destroy()
+          if entry.lock and entry.lock.Parent and not entry.lock.Visible then entry.lock.Visible=entry.lockWas end
+          if entry.equipped and entry.equipped.Parent and entry.equipped.Visible==entry.assigned then entry.equipped.Visible=entry.equippedWas end
+          shopEntries[slot]=nil;entry=nil
+        end
+        if weapon and not entry then
+          local overlay=Instance.new("TextButton")
+          overlay.Name="NovaX_LocalSkinChoice";overlay.BackgroundTransparency=1;overlay.Text=""
+          overlay.Size=UDim2.fromScale(1,1);overlay.ZIndex=30;overlay.Active=true;overlay.Parent=slot
+          local lock=button:FindFirstChild("Locked");local equipped=button:FindFirstChild("Equipped")
+          entry={overlay=overlay,name=name,weapon=weapon,lock=lock,equipped=equipped,
+            lockWas=lock and lock.Visible or false,equippedWas=equipped and equipped.Visible or false}
+          shopEntries[slot]=entry
+          overlay.Activated:Connect(function()
+            if not shopEnabled or not active then return end
+            if name=="None" then chooseSkin(weapon,nil) else chooseSkin(weapon,name) end
+          end)
+        end
+        if entry then
+          if entry.lock and entry.lock.Parent then entry.lock.Visible=false end
+          if entry.equipped and entry.equipped.Parent then
+            local isSelected=name=="None" and chosen[weapon]==nil or chosen[weapon]==name
+            entry.assigned=isSelected;entry.equipped.Visible=isSelected
+          end
+        end
+      end
+    end
+    for slot,entry in pairs(shopEntries) do
+      if not slot.Parent then if entry.overlay then entry.overlay:Destroy() end;shopEntries[slot]=nil end
+    end
+  end
+  local function setShopEnabled(value,save)
+    shopEnabled=value==true
+    if save and configState then configState.NovaXShopPreview=shopEnabled end
+    if shopEnabled then refreshShop() else clearShop() end
+  end
+  shopToggle=tab:CreateToggle({Name="Unlock Weapons",CurrentValue=shopEnabled,Callback=function(v)
+    setShopEnabled(v,true)
+  end})
+  if shopEnabled then refreshShop() end
   tab:CreateSection("Alignment")
-  tab:CreateLabel("Offsets apply locally; matching moving sections follow the weapon.")
+  tab:CreateLabel("Adjust position and rotation; matching sections follow the weapon.")
   for _,item in ipairs({{"Offset X","x",-2,2,0.05},{"Offset Y","y",-2,2,0.05},
     {"Offset Z","z",-2,2,0.05},{"Rotation X","rx",-180,180,5},
     {"Rotation Y","ry",-180,180,5},{"Rotation Z","rz",-180,180,5}}) do
@@ -493,22 +681,39 @@ local okModels,modelError=pcall(function()
       Callback=function(value) adjustments[key]=tonumber(value) or 0 end})
   end
   modelControls={Stop=function()
-    active=false;for _,c in ipairs(links) do c:Disconnect() end;clear()
+    active=false;for _,c in ipairs(links) do c:Disconnect() end;clearShop();restoreIcons();clear()
   end}
-  local configCheckAt=0
+  local configCheckAt,shopCheckAt,iconCheckAt=0,0,0
   links[#links+1]=run.RenderStepped:Connect(function()
     if not active then return end
     local now=os.clock()
     if configState and now>=configCheckAt then
       configCheckAt=now+0.5
       local incoming=configState.NovaXSkinSelections
+      local filterIncoming=configState.NovaXSkinConfigFilter
+      local desiredShop=configState.NovaXShopPreview
+      if type(desiredShop)=="boolean" and desiredShop~=shopEnabled then
+        setShopEnabled(desiredShop,false)
+        if shopToggle and shopToggle.Set then shopToggle:Set(desiredShop) end
+      end
+      local changed=false
       if type(incoming)=="string" and incoming~=encoded then
         local ok,data=pcall(function() return http:JSONDecode(incoming) end)
-        if ok and type(data)=="table" then
-          chosen=data;encoded=incoming;clear();retryAt=0;refreshSkins()
-        end
+        if ok and type(data)=="table" then chosen=data;encoded=incoming;changed=true end
+      end
+      if type(filterIncoming)=="string" and filterIncoming~=filterEncoded then
+        local ok,data=pcall(function() return http:JSONDecode(filterIncoming) end)
+        if ok and type(data)=="table" then excluded=data;filterEncoded=filterIncoming;changed=true end
+      end
+      if changed then
+        clear();retryAt=0;refreshSkins()
+        if configToggle and configToggle.Set then configToggle:Set(excluded[selectedWeapon]~=true) end
       end
     end
+    if shopEnabled and now>=shopCheckAt then
+      shopCheckAt=now+1;pcall(refreshShop)
+    end
+    if now>=iconCheckAt then iconCheckAt=now+2;pcall(updateIcons) end
     local target,weapon=activeRig();local skin=weapon and chosen[weapon]
     if not skin then if shown then clear() end;return end
     if (target~=shownRig or skin~=shownSkin) and os.clock()>=retryAt then

@@ -594,6 +594,7 @@ local okModels,modelError=pcall(function()
       if entry.overlay then entry.overlay:Destroy() end
       pcall(function()
         if entry.lock and entry.lock.Parent and entry.lock.Visible==false then entry.lock.Visible=entry.lockWas end
+        if entry.button and entry.button.Parent and entry.button.Interactable==false then entry.button.Interactable=entry.interactableWas end
         if entry.equipped and entry.equipped.Parent and entry.equipped.Visible==entry.assigned then
           entry.equipped.Visible=entry.equippedWas
         end
@@ -633,16 +634,18 @@ local okModels,modelError=pcall(function()
         if entry and (entry.name~=name or entry.weapon~=weapon or not entry.overlay.Parent) then
           entry.overlay:Destroy()
           if entry.lock and entry.lock.Parent and not entry.lock.Visible then entry.lock.Visible=entry.lockWas end
+          if entry.button and entry.button.Parent and entry.button.Interactable==false then entry.button.Interactable=entry.interactableWas end
           if entry.equipped and entry.equipped.Parent and entry.equipped.Visible==entry.assigned then entry.equipped.Visible=entry.equippedWas end
           shopEntries[slot]=nil;entry=nil
         end
-        if weapon and not entry then
+        local supported,wasInteractable=pcall(function() return button.Interactable end)
+        if weapon and not entry and supported and type(wasInteractable)=="boolean" then
           local overlay=Instance.new("TextButton")
           overlay.Name="NovaX_LocalSkinChoice";overlay.BackgroundTransparency=1;overlay.Text=""
           overlay.Size=UDim2.fromScale(1,1);overlay.ZIndex=30;overlay.Active=true;overlay.Parent=slot
           local lock=button:FindFirstChild("Locked");local equipped=button:FindFirstChild("Equipped")
-          entry={overlay=overlay,name=name,weapon=weapon,lock=lock,equipped=equipped,
-            lockWas=lock and lock.Visible or false,equippedWas=equipped and equipped.Visible or false}
+          entry={overlay=overlay,name=name,weapon=weapon,lock=lock,equipped=equipped,button=button,
+            interactableWas=wasInteractable,lockWas=lock and lock.Visible or false,equippedWas=equipped and equipped.Visible or false}
           shopEntries[slot]=entry
           overlay.Activated:Connect(function()
             if not shopEnabled or not active then return end
@@ -650,6 +653,7 @@ local okModels,modelError=pcall(function()
           end)
         end
         if entry then
+          if entry.button and entry.button.Parent then entry.button.Interactable=false end
           if entry.lock and entry.lock.Parent then entry.lock.Visible=false end
           if entry.equipped and entry.equipped.Parent then
             local isSelected=name=="None" and chosen[weapon]==nil or chosen[weapon]==name

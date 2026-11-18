@@ -6,6 +6,7 @@ local REV="2df577a270a78151c9afa2f7b7b9340e45a38f4d"
 local VISUAL_REV="b93030ffa9dd71735c208293ff59d15cb63c4c59"
 local DIAG_REV="403437264c2067d8f1fbd4c64fb53fadb1b78d65"
 local FIRE_REV="30b4f0d542cc71fafeb34910751f3c81a9828553"
+local DROPS_REV="11e04c5980846ac375db2020fcf1b2f8843874d6"
 local CORE_REV="79bbda7d58600b799b5fa22f9b8551be1901d540"
 local BASE="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/novax/v1/"
 local env=(getgenv and getgenv()) or _G
@@ -18,6 +19,8 @@ local function load(relative)
     url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..DIAG_REV.."/novax/v1.1/modules/weapon_diagnostics.lua"
   elseif relative=="modules/rapid_fire.lua" then
     url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..FIRE_REV.."/novax/v1.1/modules/rapid_fire.lua"
+  elseif relative=="modules/auto_drops.lua" then
+    url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..DROPS_REV.."/novax/v1.1/modules/auto_drops.lua"
   end
   local ok,result=pcall(function()return game:HttpGet(url,true)end)
   if not ok or type(result)~="string" or #result<100 then
@@ -124,6 +127,18 @@ if type(diagnosticsFactory)=="function" then
   if not ok then
     table.insert(env.NovaXRelease.Errors,"Weapon Diagnostics: "..tostring(err))
     warn("[NovaX] Weapon Diagnostics: "..tostring(err))
+  end
+end
+-- Workspace pickup controller: local discovery and optional remote-touch attempts.
+local dropsFactory=execute("modules/auto_drops.lua",false)
+local dropsModule=nil
+if type(dropsFactory)=="function" then
+  local ok,result=pcall(dropsFactory,env)
+  if ok and type(result)=="table" then dropsModule=result
+  else
+    local message="Auto Drops: "..tostring(result)
+    table.insert(env.NovaXRelease.Errors,message)
+    warn("[NovaX] "..message)
   end
 end
 -- Use the real client Gun controller when present; never confuse viewmodels
@@ -779,6 +794,7 @@ end
 env.NX_CLEANUP=function()
   if modelControls then pcall(modelControls.Stop) end
   if controlsModule then pcall(controlsModule.Stop) end
+  if dropsModule and type(dropsModule.Stop)=="function" then pcall(dropsModule.Stop,dropsModule) end
   if rapidModule and type(rapidModule.Stop)=="function" then pcall(rapidModule.Stop,rapidModule) end
   if type(visualModule)=="table" and type(visualModule.Stop)=="function" then
     pcall(visualModule.Stop)

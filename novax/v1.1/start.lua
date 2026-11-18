@@ -3,11 +3,12 @@
 -- Loads original 7466-line template as UI + main core, plus optional
 -- 90Hz weather, compatibility checker and integrated Weather/Diagnostics tabs.
 local REV="2df577a270a78151c9afa2f7b7b9340e45a38f4d"
-local VISUAL_REV="b93030ffa9dd71735c208293ff59d15cb63c4c59"
+local VISUAL_REV="c290c9998ce798a2720f111b19f7885e10b0d695"
 local DIAG_REV="403437264c2067d8f1fbd4c64fb53fadb1b78d65"
 local FIRE_REV="30b4f0d542cc71fafeb34910751f3c81a9828553"
-local DROPS_REV="b129b8d81f406cf491b474eab9930364accfa466"
-local CORE_REV="c18bb5a110c99b7c69db94fb1013e1c4d4dda973"
+local DROPS_REV="f7cc67f6488dbf580f8a30329264ef16924a5bac"
+local CORE_REV="89c303ff6f7d37b49fd6b175f682e27ddc332671"
+local GUI_REV="fdc937a36fdf2d80c22accf6d153be1f91b032ac"
 local SPREAD_REV="8bfaaaa7fac652ecc486baf20b983f22cd7b98d3"
 local BASE="https://raw.githubusercontent.com/ovaNite/uwuHub/"..REV.."/novax/v1/"
 local env=(getgenv and getgenv()) or _G
@@ -24,6 +25,8 @@ local function load(relative)
     url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..DROPS_REV.."/novax/v1.1/modules/auto_drops.lua"
   elseif relative=="modules/no_spread.lua" then
     url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..SPREAD_REV.."/novax/v1.1/modules/no_spread.lua"
+  elseif relative=="modules/gui_extensions.lua" then
+    url="https://raw.githubusercontent.com/ovaNite/uwuHub/"..GUI_REV.."/novax/v1.1/modules/gui_extensions.lua"
   end
   local ok,result=pcall(function()return game:HttpGet(url,true)end)
   if not ok or type(result)~="string" or #result<100 then

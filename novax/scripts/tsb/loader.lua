@@ -1,5 +1,6 @@
 -- The Strongest Battlegrounds / NovaX TSB Combo Studio
--- Manual character profiles + input recorder. Not a verified combat AI.
+-- Manual combo profiles, input recorder and continuous M1 controller.
+-- BaseM1 animations cannot override server hit distance or the 4-hit combo cycle.
 -- Runs only in TSB. Returns Stop() so NovaX Games can cleanly unload it.
 return function(ctx)
   local Players=game:GetService("Players")
@@ -23,6 +24,8 @@ return function(ctx)
   local profiles={}
   local connections={}
   local held={}
+  local m1Engine=nil
+  local m1Interval=0.32
   local profile="Default"
   local FILE="NovaX/TSB/combo_profiles.json"
   local acceptable={
@@ -55,7 +58,7 @@ return function(ctx)
     ResetOnSpawn=false,DisplayOrder=56,ZIndexBehavior=Enum.ZIndexBehavior.Sibling,
   },player:WaitForChild("PlayerGui"))
   local panel=make("Frame",{
-    Size=UDim2.fromOffset(470,362),Position=UDim2.new(0.5,-235,0.5,-181),
+    Size=UDim2.fromOffset(470,555),Position=UDim2.new(0.5,-235,0.5,-277),
     BackgroundColor3=colors.bg,BorderSizePixel=0,
   },gui)
   rounded(panel,15)
@@ -73,7 +76,7 @@ return function(ctx)
   make("TextLabel",{
     Size=UDim2.new(1,-100,0,17),Position=UDim2.fromOffset(19,35),
     BackgroundTransparency=1,Font=Enum.Font.Gotham,TextSize=11,
-    Text="Record • save • replay • separate character profiles",
+    Text="Recorder • infinite M1 input • BaseM1 animations",
     TextColor3=colors.muted,TextXAlignment=Enum.TextXAlignment.Left,
   },header)
   local toggle=make("TextButton",{
@@ -250,8 +253,58 @@ return function(ctx)
   local function releaseHeld()
     for key in pairs(held) do pcall(sendInput,key,false);held[key]=nil end
   end
+  local function initializeM1()
+    if type(loadstring)~="function" then
+      message("M1 engine unavailable: executor lacks loadstring")
+      return
+    end
+    local url="https://raw.githubusercontent.com/ovaNite/uwuHub/main/novax/scripts/tsb/m1_engine.lua"
+    local ok,factory=pcall(function()
+      local body=game:HttpGet(url,false)
+      local chunk,err=loadstring(body)
+      if not chunk then error(err) end
+      return chunk()
+    end)
+    if not ok or type(factory)~="function" then
+      message("M1 engine load failed: "..string.sub(tostring(factory),1,110))
+      return
+    end
+    local ready,engine=pcall(factory,{
+      SendInput=sendInput,
+      CanRun=function()
+        return live and not recording and not playing
+          and (not ctx or type(ctx.IsRunning)~="function" or ctx.IsRunning())
+      end,
+    })
+    if ready and type(engine)=="table" then
+      m1Engine=engine
+      m1Engine:SetInterval(m1Interval)
+      message("M1 controller ready. Hold mode can repeat beyond four inputs.")
+    else
+      message("M1 engine setup failed: "..string.sub(tostring(engine),1,110))
+    end
+  end
+  local function nearestDistance()
+    local char=player.Character
+    local root=char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+    local best=math.huge
+    for _,other in ipairs(Players:GetPlayers()) do
+      if other~=player then
+        local enemy=other.Character
+        local part=enemy and enemy:FindFirstChild("HumanoidRootPart")
+        local hum=enemy and enemy:FindFirstChildOfClass("Humanoid")
+        if part and hum and hum.Health>0 then
+          local distance=(part.Position-root.Position).Magnitude
+          if distance<best then best=distance end
+        end
+      end
+    end
+    return best<math.huge and best or nil
+  end
   local function startRecord()
     if playing then message("Stop playback before recording");return end
+    if m1Engine then m1Engine:Stop() end
     switchProfile()
     current={}
     recordStart=os.clock()
@@ -271,6 +324,7 @@ return function(ctx)
   end
   local function playback()
     if recording or playing then return end
+    if m1Engine then m1Engine:Stop() end
     switchProfile()
     if #current==0 then message("No events. Record a combo first.");return end
     playing=true
@@ -309,12 +363,86 @@ return function(ctx)
     message("Cleared "..profile)
   end)
   make("TextLabel",{
-    Position=UDim2.fromOffset(18,231),Size=UDim2.new(1,-36,0,53),
+    Position=UDim2.fromOffset(18,231),Size=UDim2.new(1,-36,0,46),
     BackgroundTransparency=1,TextWrapped=true,
     Font=Enum.Font.Gotham,TextSize=11,TextXAlignment=Enum.TextXAlignment.Left,
     TextYAlignment=Enum.TextYAlignment.Top,TextColor3=colors.muted,
-    Text="Recorder captures movement, M1/M2, Q/F, Space and moves 1–4. Use a different profile for each character. Replay timing follows the client scheduler and is not guaranteed frame-perfect.",
+    Text="Recorder captures movement, M1/M2, Q/F, Space and 1–4 moves. Save separate character profiles. Timings are executor-dependent.",
   },body)
+  make("TextLabel",{
+    Position=UDim2.fromOffset(18,286),Size=UDim2.new(1,-36,0,22),
+    BackgroundTransparency=1,Font=Enum.Font.GothamBold,
+    TextSize=13,TextColor3=colors.white,
+    TextXAlignment=Enum.TextXAlignment.Left,
+    Text="INFINITE M1 INPUT   /   ANIMATION MONITOR",
+  },body)
+  local autoBtn
+  autoBtn=btn("AUTO M1  /  OFF",18,315,173,function()
+    if not m1Engine then message("M1 engine not loaded; restart and check output");return end
+    local info=m1Engine:Stats()
+    if info.running then
+      m1Engine:Stop()
+      autoBtn.Text="AUTO M1  /  OFF"
+      message("Continuous M1 stopped")
+    else
+      if recording or playing then
+        message("Stop recording or combo playback first")
+        return
+      end
+      local ok,err=m1Engine:Start()
+      if not ok then
+        message("M1 start failed: "..tostring(err))
+      else
+        autoBtn.Text="AUTO M1  /  ON"
+        message("Continuous M1 inputs enabled. Server combo rules still apply.")
+      end
+    end
+  end,true)
+  local slower=btn("SLOWER",202,315,117,function()
+    m1Interval=math.clamp(math.floor((m1Interval+0.04)*100+0.5)/100,0.12,0.8)
+    if m1Engine then m1Engine:SetInterval(m1Interval) end
+    message("M1 input interval: "..string.format("%.2fs",m1Interval))
+  end)
+  local faster=btn("FASTER",329,315,123,function()
+    m1Interval=math.clamp(math.floor((m1Interval-0.04)*100+0.5)/100,0.12,0.8)
+    if m1Engine then m1Engine:SetInterval(m1Interval) end
+    message("M1 input interval: "..string.format("%.2fs",m1Interval))
+  end)
+  btn("SCAN BaseM1",18,365,208,function()
+    if not m1Engine then message("M1 engine unavailable");return end
+    m1Engine:RefreshAnimations()
+    message(m1Engine:Status())
+  end)
+  btn("CHECK RANGE",238,365,214,function()
+    local distance=nearestDistance()
+    message(distance and string.format(
+      "Nearest player: %.1f studs. BaseM1 IDs do not change server hit range.",distance
+    ) or "No other live player detected; server punch range is unverified.")
+  end)
+  local m1Info=make("TextLabel",{
+    Position=UDim2.fromOffset(18,414),Size=UDim2.new(1,-36,0,70),
+    BackgroundTransparency=1,Font=Enum.Font.Gotham,
+    TextSize=11,TextColor3=colors.muted,TextWrapped=true,
+    TextXAlignment=Enum.TextXAlignment.Left,TextYAlignment=Enum.TextYAlignment.Top,
+    Text="BaseM1 detects animation categories, not server hits. Infinite M1 means repeated inputs without a four-click limit; it does not remove the game's server-side four-hit reset or grant unlimited punch distance.",
+  },body)
+  initializeM1()
+  task.spawn(function()
+    while live do
+      task.wait(1)
+      if not live then break end
+      if m1Engine and m1Info.Parent then
+        local stats=m1Engine:Stats()
+        m1Info.Text=string.format(
+          "Input attempts: %d | dispatched: %d | interval: %.2fs\\nBaseM1: %d styles / %d IDs | current animation: %s\\nServer hit radius and four-hit chain are unchanged.",
+          stats.attempted,stats.dispatched,stats.interval,
+          stats.styles,stats.animations,stats.lastAnimation)
+        if not stats.running and autoBtn.Text~="AUTO M1  /  OFF" then
+          autoBtn.Text="AUTO M1  /  OFF"
+        end
+      end
+    end
+  end)
   bind(UIS.InputBegan,function(event,processed)
     if not live or not recording or processed or UIS:GetFocusedTextBox() then return end
     local key=event.UserInputType==Enum.UserInputType.Keyboard
@@ -331,7 +459,7 @@ return function(ctx)
   bind(toggle.MouseButton1Click,function()
     body.Visible=not body.Visible
     toggle.Text=body.Visible and "HIDE" or "SHOW"
-    tween(panel,{Size=body.Visible and UDim2.fromOffset(470,362) or UDim2.fromOffset(470,59)})
+    tween(panel,{Size=body.Visible and UDim2.fromOffset(470,555) or UDim2.fromOffset(470,59)})
   end)
   local dragging=false
   local dragStart=nil
@@ -359,6 +487,7 @@ return function(ctx)
   function api:Stop()
     if not live then return end
     live=false;playing=false;recording=false
+    if m1Engine then pcall(function()m1Engine:Unload()end);m1Engine=nil end
     releaseHeld()
     for _,connection in ipairs(connections) do pcall(function()connection:Disconnect()end)end
     if gui and gui.Parent then gui:Destroy()end

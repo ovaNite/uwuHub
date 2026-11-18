@@ -709,7 +709,7 @@ ensureConfigFolder()
 
 -- Track the selected config separately from normal *.json config files.
 -- Never overwrite a user's saved config during startup.
-local AUTO_CONFIG_FILE = CONFIG_FOLDER.."/.autoload"
+local AUTO_CONFIG_FILE = CONFIG_FOLDER.."/NovaX_last_profile.txt"
 local autoConfigName=nil
 local autoConfigStatus="No saved config found"
 local function rememberAutoConfig(name)

@@ -22,6 +22,7 @@ local restoreSoftSpoof = function() end
 local applySoftSpoof = function() return true end
 local applyReplicationControlSpoof = function() return false end
 local restoreAntiHitPose = function() end
+local restoreAntiHitMovement = function() end
 local aimTarget
 local aimLockedPlayer
 local aimLockLostSince
@@ -274,6 +275,7 @@ cleanup = function()
     if setFPSBoost then setFPSBoost(false) end
   end)
   pcall(restoreAntiHitPose)
+  pcall(restoreAntiHitMovement)
   pcall(function()
     if getgenv then getgenv().NX_UI_WINDOW=nil end
     if UI_WINDOW and UI_WINDOW.Destroy then
@@ -407,6 +409,7 @@ local STATE = {
   AntiHitMode = "Adaptive Jitter",
   AntiHitSpeed = 2.2,
   AntiHitExperimental = false,
+  AntiHitGuardDodge = true,
   AntiVoid = true,
   
   BindToggleGUI = "K",
@@ -4064,16 +4067,143 @@ end
 local speedBV, flyBV, flyBG, flyActive = nil,nil,nil,false
 local noClipOriginal = {}
 local antiHitPose = {char=nil, neck=nil, waist=nil}
+local antiHitOriginalHumanoid, antiHitOriginalAutoRotate = nil, nil
+local headGuard = {char=nil, nextScan=0, nextDodge=0, dodgeUntil=0, lateral=nil, threat=0}
 local lastInfJumpAt = 0
 function clearSpeed() if speedBV then pcall(function() speedBV:Destroy() end) end; speedBV=nil end
 function stopFly() if flyBV then pcall(function() flyBV:Destroy() end) end; if flyBG then pcall(function() flyBG:Destroy() end) end; flyBV,flyBG,flyActive=nil,nil,false; local hum=getHumanoid(); if hum then pcall(function() hum.PlatformStand=false end); pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end) end end
 function restoreNoClip() for part,old in pairs(noClipOriginal) do if part and part.Parent then pcall(function() part.CanCollide=old end) end end; noClipOriginal={} end
-restoreAntiHitPose = function() pcall(function() if antiHitPose.neck and antiHitPose.neck.Parent then antiHitPose.neck.Transform=CFrame.new() end; if antiHitPose.waist and antiHitPose.waist.Parent then antiHitPose.waist.Transform=CFrame.new() end end); antiHitPose={char=nil,neck=nil,waist=nil} end
+restoreAntiHitPose = function()
+  pcall(function()
+    if antiHitPose.neck and antiHitPose.neck.Parent then antiHitPose.neck.Transform=CFrame.new() end
+    if antiHitPose.waist and antiHitPose.waist.Parent then antiHitPose.waist.Transform=CFrame.new() end
+  end)
+  antiHitPose={char=nil,neck=nil,waist=nil}
+  headGuard.dodgeUntil=0
+  headGuard.lateral=nil
+end
+restoreAntiHitMovement = function()
+  if antiHitOriginalHumanoid and antiHitOriginalHumanoid.Parent and antiHitOriginalAutoRotate~=nil then
+    pcall(function() antiHitOriginalHumanoid.AutoRotate=antiHitOriginalAutoRotate end)
+  end
+  antiHitOriginalHumanoid=nil
+  antiHitOriginalAutoRotate=nil
+end
+local function setAntiHitAutoRotate(hum,value)
+  if antiHitOriginalHumanoid~=hum then
+    restoreAntiHitMovement()
+    antiHitOriginalHumanoid=hum
+    antiHitOriginalAutoRotate=hum.AutoRotate
+  end
+  hum.AutoRotate=value
+end
 function getAntiHitJoints()
-  local char=getChar(); if not char then return nil end; if antiHitPose.char==char then return antiHitPose end; restoreAntiHitPose()
-  local torso=char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso"); local head=char:FindFirstChild("Head"); antiHitPose={char=char,neck=nil,waist=nil}
-  if head then antiHitPose.neck=head:FindFirstChild("Neck") end; if (not antiHitPose.neck) and torso then antiHitPose.neck=torso:FindFirstChild("Neck") end; if torso then antiHitPose.waist=torso:FindFirstChild("Waist") end
+  local char=getChar()
+  if not char then return nil end
+  if antiHitPose.char==char then return antiHitPose end
+  restoreAntiHitPose()
+  local torso=char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
+  local head=char:FindFirstChild("Head")
+  antiHitPose={char=char,neck=nil,waist=nil}
+  if head then antiHitPose.neck=head:FindFirstChild("Neck") end
+  if not antiHitPose.neck and torso then antiHitPose.neck=torso:FindFirstChild("Neck") end
+  if torso then antiHitPose.waist=torso:FindFirstChild("Waist") end
   return antiHitPose
+end
+-- Client-visible threat estimation: use the actual R15 head/hitbox locations as
+-- sensing points, but NEVER resize/move the game's hitboxes or fake immunity.
+local function sampleHeadThreat(char,root)
+  local head=char:FindFirstChild("Head")
+  if not head or not head:IsA("BasePart") then return nil,0 end
+  local points={head.Position}
+  for _,name in ipairs({"HitboxHead","PhysicalHitboxHead","HitboxHeadSmall"}) do
+    local part=char:FindFirstChild(name)
+    if part and part:IsA("BasePart") then points[#points+1]=part.Position end
+  end
+  local best,score=nil,0
+  for _,opponent in ipairs(Players:GetPlayers()) do
+    if opponent~=LocalPlayer and (not LocalPlayer.Team or opponent.Team~=LocalPlayer.Team) then
+      local enemy=opponent.Character
+      local ehrp=enemy and enemy:FindFirstChild("HumanoidRootPart")
+      local ehead=enemy and enemy:FindFirstChild("Head")
+      local ehuman=enemy and enemy:FindFirstChildOfClass("Humanoid")
+      if ehrp and ehead and ehuman and ehuman.Health>0 then
+        local origin=ehead.Position
+        local dist=(head.Position-origin).Magnitude
+        if dist>2 and dist<105 then
+          local facing=ehrp.CFrame.LookVector
+          local aim=ehead.CFrame.LookVector
+          for _,point in ipairs(points) do
+            local v=point-origin
+            if v.Magnitude>1 then
+              local direction=v.Unit
+              local alignment=math.max(facing:Dot(direction),aim:Dot(direction))
+              if alignment>0.9 then
+                local candidate=alignment+(105-dist)*0.001
+                if candidate>score then
+                  local los=RaycastParams.new()
+                  los.FilterType=Enum.RaycastFilterType.Exclude
+                  los.FilterDescendantsInstances={enemy,char}
+                  los.IgnoreWater=true
+                  local obstruction=workspace:Raycast(origin,v,los)
+                  if not obstruction then
+                    local horizontal=Vector3.new(direction.X,0,direction.Z)
+                    if horizontal.Magnitude>0.05 then
+                      local unit=horizontal.Unit
+                      best=Vector3.new(-unit.Z,0,unit.X)
+                      score=candidate
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+  return best,score
+end
+local function applyHeadGuard(t,root,hum)
+  local char=getChar()
+  if not char or not char:FindFirstChild("UpperTorso") then return end
+  if headGuard.char~=char then
+    headGuard={char=char,nextScan=0,nextDodge=0,dodgeUntil=0,lateral=nil,threat=0}
+  end
+  local j=getAntiHitJoints()
+  if not j then return end
+  -- Bounded rotations around R15's neck and waist, not a whole-body tumble.
+  local factor=STATE.AntiHitExperimental and 1.25 or 1
+  local yaw=(math.sin(t*4.3)*0.49+math.sin(t*7.1)*0.17)*factor
+  local pitch=(-0.22+math.sin(t*5.2)*0.22)*factor
+  local roll=(math.cos(t*5.8)*0.36+math.sin(t*9.6)*0.11)*factor
+  if j.neck and j.neck:IsA("Motor6D") then
+    j.neck.Transform=CFrame.Angles(pitch,yaw,roll)
+  end
+  if j.waist and j.waist:IsA("Motor6D") then
+    j.waist.Transform=CFrame.Angles(-pitch*0.3,-yaw*0.35,-roll*0.28)
+  end
+  local now=os.clock()
+  if now>=headGuard.nextScan then
+    headGuard.nextScan=now+0.13
+    local lateral,risk=sampleHeadThreat(char,root)
+    headGuard.threat=risk
+    if lateral and STATE.AntiHitGuardDodge and now>=headGuard.nextDodge then
+      local side=(math.floor(now*2.7)%2==0) and 1 or -1
+      headGuard.lateral=lateral*side
+      headGuard.nextDodge=now+0.46
+      headGuard.dodgeUntil=now+0.17
+    end
+  end
+  -- Dodge with normal Humanoid movement, preserving the player's current
+  -- motion rather than teleporting or editing client/server hitbox sizes.
+  if STATE.AntiHitGuardDodge and now<headGuard.dodgeUntil and headGuard.lateral
+    and hum.Health>0 and not hum.Sit and hum.FloorMaterial~=Enum.Material.Air
+    and not UserInputService:GetFocusedTextBox() then
+    local current=hum.MoveDirection
+    local proposed=current*0.6+headGuard.lateral*0.9
+    if proposed.Magnitude>0.01 then hum:Move(proposed.Unit,false) end
+  end
 end
 function applyLobbyAntiHit(t,mode)
   local j=getAntiHitJoints(); if not j then return end; local yaw=math.sin(t*3.1)*1.4; local pitch=math.cos(t*2.7)*0.8; local roll=math.sin(t*3.5)*0.9
@@ -4093,7 +4223,25 @@ function setupMovement()
       else if flyActive or flyBV or flyBG then stopFly() end end
       if STATE.NoClip then local char=getChar(); if char then for _,part in ipairs(char:GetDescendants()) do if part:IsA("BasePart") then if noClipOriginal[part]==nil then noClipOriginal[part]=part.CanCollide end; part.CanCollide=false end end end else restoreNoClip() end
       if STATE.AntiVoid and root then local killY=workspace.FallenPartsDestroyHeight; if typeof(killY)=="number" and root.Position.Y<=killY+35 and tick()>=(antiVoidNextAt or 0) then antiVoidNextAt=tick()+0.35; root.AssemblyLinearVelocity=Vector3.new(root.AssemblyLinearVelocity.X,0,root.AssemblyLinearVelocity.Z); root.CFrame=CFrame.new(root.Position.X,math.max(killY+145,45),root.Position.Z) end end
-      if STATE.AntiHit and root and hum and not (STATE.FlyEnabled and STATE.FlyToggle) then local t=tick()*math.clamp(safeNum(STATE.AntiHitSpeed),0.4,12); local mode=tostring(STATE.AntiHitMode or "Adaptive Jitter"); if true then restoreAntiHitPose(); hum.AutoRotate=false; local yaw=t*(mode=="Orbital Drift" and 5.4 or 7.2); local pitch=math.sin(t*3.4)*(STATE.AntiHitExperimental and 1.4 or 0.85); local roll=math.cos(t*4.1)*(mode=="Vector Chaos" and 1.4 or 0.85); if mode=="Head Orbit" then pitch=pitch+math.pi end; root.CFrame=CFrame.new(root.Position)*CFrame.Angles(pitch,yaw,roll) else hum.AutoRotate=true; applyLobbyAntiHit(t,mode) end else restoreAntiHitPose(); if hum then hum.AutoRotate=true end end
+      if STATE.AntiHit and root and hum and not (STATE.FlyEnabled and STATE.FlyToggle) then
+        local t=tick()*math.clamp(safeNum(STATE.AntiHitSpeed),0.4,12)
+        local mode=tostring(STATE.AntiHitMode or "Adaptive Jitter")
+        if mode=="Head Guard (R15)" then
+          restoreAntiHitMovement()
+          applyHeadGuard(t,root,hum)
+        else
+          restoreAntiHitPose()
+          setAntiHitAutoRotate(hum,false)
+          local yaw=t*(mode=="Orbital Drift" and 5.4 or 7.2)
+          local pitch=math.sin(t*3.4)*(STATE.AntiHitExperimental and 1.4 or 0.85)
+          local roll=math.cos(t*4.1)*(mode=="Vector Chaos" and 1.4 or 0.85)
+          if mode=="Head Orbit" then pitch=pitch+math.pi end
+          root.CFrame=CFrame.new(root.Position)*CFrame.Angles(pitch,yaw,roll)
+        end
+      else
+        if antiHitPose.char then restoreAntiHitPose() end
+        restoreAntiHitMovement()
+      end
       if STATE.BunnyHop and hum and hum.MoveDirection.Magnitude>0 and hum.FloorMaterial~=Enum.Material.Air then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
     end)
   end))
@@ -4991,7 +5139,7 @@ end
       "AntiHitMode",
       c:CreateDropdown({
         Name = "Mode",
-        Options = {"Adaptive Jitter", "Orbital Drift", "Head Orbit", "Vector Chaos"},
+        Options = {"Adaptive Jitter", "Orbital Drift", "Head Orbit", "Vector Chaos", "Head Guard (R15)"},
         CurrentOption = {STATE.AntiHitMode},
         Callback = function(v)
           STATE.AntiHitMode = type(v) == "table" and v[1] or tostring(v)
@@ -5021,6 +5169,13 @@ end
       CurrentValue = STATE.AntiHitExperimental,
       Callback = function(v)
         STATE.AntiHitExperimental = v
+      end,
+    }))
+    bindStateControl("AntiHitGuardDodge", c:CreateToggle({
+      Name = "Head Guard: Auto Dodge",
+      CurrentValue = STATE.AntiHitGuardDodge,
+      Callback = function(v)
+        STATE.AntiHitGuardDodge = v
       end,
     }))
     bindStateControl("AntiVoid", c:CreateToggle({

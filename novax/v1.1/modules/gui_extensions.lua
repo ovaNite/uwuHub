@@ -75,7 +75,7 @@ return function(env)
       state.NovaXWeatherSound=value==true
       if weather then weather.Options.Sound=state.NovaXWeatherSound end
     end}))
-  record("NovaXWeatherStorm",tab:CreateToggle({Name="Thunderstorm",CurrentValue=state.NovaXWeatherStorm==false,
+  record("NovaXWeatherStorm",tab:CreateToggle({Name="Thunderstorm",CurrentValue=state.NovaXWeatherStorm==true,
     Callback=function(value)
       state.NovaXWeatherStorm=value==true
       if weather then weather.Options.Storm=state.NovaXWeatherStorm end

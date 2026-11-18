@@ -23,7 +23,7 @@ return function(env)
   local connections={}
   local watched={}
   local entries={}
-  local attempts,disappeared=0,0
+  local attempts=0
   local nextAttempt=0
   local navigationToken=0
   local navigationTarget=nil
@@ -94,15 +94,16 @@ return function(env)
     end
     return char,hum,max>0 and value<max-0.001
   end
-  local function selectDrop(root,needHeal)
+  local function selectDrop(root,needHeal,now)
     local chosen,bestDist,priority=nil,math.huge,math.huge
     for instance,entry in pairs(entries) do
       if instance.Parent==Workspace and entry.kind then
         local heal=entry.kind=="Health"
         local wanted=(heal and settings.NovaXAutoHeal and needHeal)
           or (not heal and settings.NovaXAutoAmmo)
-        if wanted then
-          local rank=(heal and needHeal) and 0 or 1
+        -- Cooling down one uncollected Health drop must not starve Ammo.
+        if wanted and now-entry.lastAttempt>1.6 then
+          local rank=heal and 0 or 1
           local distance=(instance.Position-root.Position).Magnitude
           -- Never reject a drop solely due to distance.
           if rank<priority or (rank==priority and distance<bestDist) then
@@ -180,14 +181,14 @@ return function(env)
     local char,hum,needHeal=healthData()
     local root=char and char:FindFirstChild("HumanoidRootPart")
     if not root or not root:IsA("BasePart") or not hum or hum.Health<=0 then return end
-    local drop,distance=selectDrop(root,needHeal)
+    local now=os.clock()
+    local drop,distance=selectDrop(root,needHeal,now)
     if not drop then
       if navigationTarget then navigationToken+=1;navigationTarget=nil end
       return
     end
     local entry=entries[drop]
     if not entry then return end
-    local now=os.clock()
     if now>=nextAttempt and (now-entry.lastAttempt)>1.6 then
       nextAttempt=now+0.65
       if settings.NovaXAutoDropRemote then

@@ -162,6 +162,30 @@ return function(ctx)
       end
     end
   end
+  local function readRepositoryProfiles()
+    if type(loadstring)~="function" then return end
+    local url="https://raw.githubusercontent.com/ovaNite/uwuHub/main/novax/scripts/tsb/combos.lua"
+    local ok,result=pcall(function()
+      local source=game:HttpGet(url,true)
+      local fn,err=loadstring(source)
+      if not fn then error(err) end
+      return fn()
+    end)
+    if not ok or type(result)~="table" then return end
+    for name,steps in pairs(result) do
+      if type(name)=="string" and #name<=48 and type(steps)=="table" then
+        local valid={}
+        for _,event in ipairs(steps) do
+          if type(event)=="table" and type(event.t)=="number"
+            and type(event.key)=="string" and type(event.down)=="boolean"
+            and acceptable[event.key] and event.t>=0 and event.t<=60 then
+            valid[#valid+1]={t=event.t,key=event.key,down=event.down}
+          end
+        end
+        profiles[name]=valid
+      end
+    end
+  end
   local function writeProfiles()
     profiles[profile]=current
     if type(writefile)~="function" then
@@ -216,7 +240,8 @@ return function(ctx)
       end
       if type(fn)=="function" then
         success=pcall(function()
-          fn(isMouse and nil or Enum.KeyCode[key].Value)
+          if isMouse then fn()
+          else fn(Enum.KeyCode[key].Value) end
         end)
       end
     end
@@ -327,6 +352,7 @@ return function(ctx)
   bind(UIS.InputEnded,function(inputEvent)
     if inputEvent.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end
   end)
+  readRepositoryProfiles()
   readProfiles()
   switchProfile()
   local api={}
